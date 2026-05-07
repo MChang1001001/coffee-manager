@@ -1,12 +1,12 @@
-package com.mian.coffee;
+package com.example.coffeebean;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class CoffeeManagerApplication {
+public class CoffeeBeanApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(CoffeeManagerApplication.class, args);
+        SpringApplication.run(CoffeeBeanApplication.class, args);
     }
 }

@@ -22,7 +22,7 @@ body {
 }
 
 .panel {
-  width: min(640px, 100%);
+  width: min(720px, 100%);
   border: 1px solid #d8cdc0;
   border-radius: 8px;
   background: #fffaf4;
@@ -40,6 +40,85 @@ body {
 h1 {
   margin: 0;
   color: #241a14;
-  font-size: clamp(32px, 8vw, 64px);
-  line-height: 1;
+  font-size: 40px;
+  line-height: 1.1;
+}
+
+.heading {
+  margin-bottom: 28px;
+}
+
+.status-list {
+  display: grid;
+  gap: 12px;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #eaded1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 14px 16px;
+}
+
+.status-row span,
+.user-card span {
+  color: #5c5047;
+  font-size: 14px;
+}
+
+.status-row strong {
+  color: #a23b3b;
+  font-size: 16px;
+}
+
+.status-row strong.ok {
+  color: #1c7c54;
+}
+
+.user-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  border: 1px solid #d6e5db;
+  border-radius: 8px;
+  background: #f5fbf7;
+  padding: 16px;
+}
+
+.user-card strong {
+  color: #18251d;
+  font-size: 20px;
+}
+
+.user-card small {
+  color: #58665d;
+}
+
+.error {
+  margin: 16px 0 0;
+  border: 1px solid #efc7c7;
+  border-radius: 8px;
+  background: #fff4f4;
+  color: #8a2f2f;
+  padding: 12px 14px;
+}
+
+button {
+  margin-top: 20px;
+  border: 0;
+  border-radius: 8px;
+  background: #4f6f52;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 12px 16px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
