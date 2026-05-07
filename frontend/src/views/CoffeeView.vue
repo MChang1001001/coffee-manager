@@ -1,0 +1,651 @@
+<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ensureDevAuth } from '../api/auth'
+import type { UserProfile } from '../api/auth'
+import {
+  createCoffeeBean,
+  deleteCoffeeBean,
+  getCoffeeBean,
+  listCoffeeBeans,
+  updateCoffeeBean,
+} from '../api/coffee'
+import type {
+  CoffeeBeanDetail,
+  CoffeeBeanListItem,
+  CoffeeBeanPayload,
+  CoffeeBeanQuery,
+  PageResponse,
+} from '../api/coffee'
+import { getRequestErrorMessage } from '../api/request'
+
+interface CoffeeBeanForm {
+  name: string
+  origin: string
+  region: string
+  farm: string
+  variety: string
+  processMethod: string
+  roastLevel: string
+  roaster: string
+  roastDate: string
+  purchaseDate: string
+  openDate: string
+  finishDate: string
+  netWeightGrams: string | number
+  price: string | number
+  currency: string
+  status: string
+  coverImageUrl: string
+  notes: string
+}
+
+const defaultForm: CoffeeBeanForm = {
+  name: '',
+  origin: '',
+  region: '',
+  farm: '',
+  variety: '',
+  processMethod: '',
+  roastLevel: '',
+  roaster: '',
+  roastDate: '',
+  purchaseDate: '',
+  openDate: '',
+  finishDate: '',
+  netWeightGrams: '',
+  price: '',
+  currency: 'CNY',
+  status: 'UNOPENED',
+  coverImageUrl: '',
+  notes: '',
+}
+
+const currentUser = ref<UserProfile | null>(null)
+const beans = ref<CoffeeBeanListItem[]>([])
+const loading = ref(false)
+const saving = ref(false)
+const deletingId = ref<number | null>(null)
+const error = ref('')
+const notice = ref('')
+const formMode = ref<'create' | 'edit'>('create')
+const editingId = ref<number | null>(null)
+
+const filters = reactive({
+  keyword: '',
+  roastLevel: '',
+  processMethod: '',
+  origin: '',
+  page: 1,
+  pageSize: 20,
+})
+
+const pageState = reactive({
+  total: 0,
+  totalPages: 0,
+})
+
+const form = reactive<CoffeeBeanForm>({ ...defaultForm })
+
+const formTitle = computed(() => (formMode.value === 'edit' ? '编辑咖啡豆' : '新增咖啡豆'))
+const submitText = computed(() => {
+  if (saving.value) {
+    return '保存中'
+  }
+
+  return formMode.value === 'edit' ? '保存修改' : '新增咖啡豆'
+})
+const hasRows = computed(() => beans.value.length > 0)
+const effectiveTotalPages = computed(() => {
+  if (pageState.total <= 0) {
+    return 0
+  }
+
+  return Math.max(1, pageState.totalPages)
+})
+const canGoPrevious = computed(() => filters.page > 1 && !loading.value)
+const canGoNext = computed(() => filters.page < effectiveTotalPages.value && !loading.value)
+
+onMounted(() => {
+  void bootPage()
+})
+
+async function bootPage() {
+  loading.value = true
+  error.value = ''
+
+  try {
+    currentUser.value = await ensureDevAuth()
+  } catch (caughtError) {
+    error.value = `临时登录失败：${getRequestErrorMessage(caughtError)}`
+    loading.value = false
+    return
+  }
+
+  await fetchBeans()
+}
+
+async function fetchBeans() {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const page = await listCoffeeBeans(buildQuery())
+
+    if (filters.page > 1 && page.items.length === 0 && page.total > 0) {
+      filters.page = Math.max(1, page.totalPages)
+      applyPage(await listCoffeeBeans(buildQuery()))
+      return
+    }
+
+    applyPage(page)
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+  } finally {
+    loading.value = false
+  }
+}
+
+function applyPage(page: PageResponse<CoffeeBeanListItem>) {
+  beans.value = page.items ?? []
+  filters.page = page.page
+  filters.pageSize = page.pageSize
+  pageState.total = page.total
+  pageState.totalPages = page.totalPages
+}
+
+function buildQuery(): CoffeeBeanQuery {
+  return {
+    keyword: emptyToUndefined(filters.keyword),
+    roastLevel: emptyToUndefined(filters.roastLevel),
+    processMethod: emptyToUndefined(filters.processMethod),
+    origin: emptyToUndefined(filters.origin),
+    page: filters.page,
+    pageSize: filters.pageSize,
+  }
+}
+
+function applyFilters() {
+  notice.value = ''
+  filters.page = 1
+  void fetchBeans()
+}
+
+function resetFilters() {
+  notice.value = ''
+  filters.keyword = ''
+  filters.roastLevel = ''
+  filters.processMethod = ''
+  filters.origin = ''
+  filters.page = 1
+  filters.pageSize = 20
+  void fetchBeans()
+}
+
+function changePage(page: number) {
+  if (page < 1 || (effectiveTotalPages.value > 0 && page > effectiveTotalPages.value)) {
+    return
+  }
+
+  filters.page = page
+  void fetchBeans()
+}
+
+function changePageSize() {
+  filters.page = 1
+  void fetchBeans()
+}
+
+function startCreate() {
+  error.value = ''
+  notice.value = ''
+  resetForm()
+}
+
+async function startEdit(bean: CoffeeBeanListItem) {
+  error.value = ''
+  notice.value = ''
+
+  try {
+    const detail = await getCoffeeBean(bean.id)
+    editingId.value = bean.id
+    formMode.value = 'edit'
+    fillForm(detail)
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+  }
+}
+
+async function submitForm() {
+  error.value = ''
+  notice.value = ''
+
+  let payload: CoffeeBeanPayload
+
+  try {
+    payload = toPayload()
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+    return
+  }
+
+  saving.value = true
+
+  try {
+    if (formMode.value === 'edit' && editingId.value !== null) {
+      await updateCoffeeBean(editingId.value, payload)
+      notice.value = '咖啡豆已更新。'
+    } else {
+      await createCoffeeBean(payload)
+      notice.value = '咖啡豆已新增。'
+    }
+
+    resetForm()
+    await fetchBeans()
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function confirmDelete(bean: CoffeeBeanListItem) {
+  const confirmed = window.confirm(`确认删除「${bean.name}」吗？`)
+
+  if (!confirmed) {
+    return
+  }
+
+  error.value = ''
+  notice.value = ''
+  deletingId.value = bean.id
+
+  try {
+    await deleteCoffeeBean(bean.id)
+
+    if (editingId.value === bean.id) {
+      resetForm()
+    }
+
+    notice.value = '咖啡豆已删除。'
+    await fetchBeans()
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+  } finally {
+    deletingId.value = null
+  }
+}
+
+function fillForm(detail: CoffeeBeanDetail) {
+  Object.assign(form, {
+    name: valueToString(detail.name),
+    origin: valueToString(detail.origin),
+    region: valueToString(detail.region),
+    farm: valueToString(detail.farm),
+    variety: valueToString(detail.variety),
+    processMethod: valueToString(detail.processMethod),
+    roastLevel: valueToString(detail.roastLevel),
+    roaster: valueToString(detail.roaster),
+    roastDate: valueToString(detail.roastDate),
+    purchaseDate: valueToString(detail.purchaseDate),
+    openDate: valueToString(detail.openDate),
+    finishDate: valueToString(detail.finishDate),
+    netWeightGrams: valueToString(detail.netWeightGrams),
+    price: valueToString(detail.price),
+    currency: valueToString(detail.currency || 'CNY'),
+    status: valueToString(detail.status || 'UNOPENED'),
+    coverImageUrl: valueToString(detail.coverImageUrl),
+    notes: valueToString(detail.notes),
+  })
+}
+
+function resetForm() {
+  Object.assign(form, defaultForm)
+  editingId.value = null
+  formMode.value = 'create'
+}
+
+function toPayload(): CoffeeBeanPayload {
+  const name = form.name.trim()
+
+  if (!name) {
+    throw new Error('咖啡豆名称不能为空。')
+  }
+
+  return {
+    name,
+    origin: emptyToNull(form.origin),
+    region: emptyToNull(form.region),
+    farm: emptyToNull(form.farm),
+    variety: emptyToNull(form.variety),
+    processMethod: emptyToNull(form.processMethod),
+    roastLevel: emptyToNull(form.roastLevel),
+    roaster: emptyToNull(form.roaster),
+    roastDate: emptyToNull(form.roastDate),
+    purchaseDate: emptyToNull(form.purchaseDate),
+    openDate: emptyToNull(form.openDate),
+    finishDate: emptyToNull(form.finishDate),
+    netWeightGrams: positiveNumberOrNull(form.netWeightGrams, '净含量'),
+    price: nonNegativeNumberOrNull(form.price, '价格'),
+    currency: emptyToNull(form.currency),
+    status: emptyToNull(form.status),
+    coverImageUrl: emptyToNull(form.coverImageUrl),
+    notes: emptyToNull(form.notes),
+  }
+}
+
+function emptyToNull(value: string) {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+function emptyToUndefined(value: string) {
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+function valueToString(value: string | number | null | undefined) {
+  return value === null || value === undefined ? '' : String(value)
+}
+
+function positiveNumberOrNull(value: string | number, label: string) {
+  const parsed = parseOptionalNumber(value, label)
+
+  if (parsed !== null && parsed <= 0) {
+    throw new Error(`${label}必须大于 0。`)
+  }
+
+  return parsed
+}
+
+function nonNegativeNumberOrNull(value: string | number, label: string) {
+  const parsed = parseOptionalNumber(value, label)
+
+  if (parsed !== null && parsed < 0) {
+    throw new Error(`${label}不能小于 0。`)
+  }
+
+  return parsed
+}
+
+function parseOptionalNumber(value: string | number, label: string) {
+  const trimmed = String(value).trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  const parsed = Number(trimmed)
+
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label}必须是数字。`)
+  }
+
+  return parsed
+}
+
+function display(value: string | number | null | undefined) {
+  return value === null || value === undefined || value === '' ? '-' : value
+}
+</script>
+
+<template>
+  <main class="coffee-page">
+    <section class="page-hero">
+      <div>
+        <p class="eyebrow">Coffee Beans</p>
+        <h1>咖啡豆档案</h1>
+        <p class="subtitle">基础信息、包装链接和入库状态。</p>
+      </div>
+      <div class="user-status">
+        <span>当前用户</span>
+        <strong>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</strong>
+      </div>
+    </section>
+
+    <section class="filter-bar" aria-label="咖啡豆筛选">
+      <form class="filter-form" @submit.prevent="applyFilters">
+        <label class="field">
+          <span>关键词</span>
+          <input v-model="filters.keyword" type="search" placeholder="名称 / 烘焙商 / 产地" />
+        </label>
+
+        <label class="field">
+          <span>烘焙度</span>
+          <input v-model="filters.roastLevel" type="text" placeholder="LIGHT / MEDIUM" />
+        </label>
+
+        <label class="field">
+          <span>处理法</span>
+          <input v-model="filters.processMethod" type="text" placeholder="WASHED / NATURAL" />
+        </label>
+
+        <label class="field">
+          <span>产地</span>
+          <input v-model="filters.origin" type="text" placeholder="Ethiopia" />
+        </label>
+
+        <div class="filter-actions">
+          <button type="submit" :disabled="loading">查询</button>
+          <button type="button" class="secondary" :disabled="loading" @click="resetFilters">
+            重置
+          </button>
+          <button type="button" class="secondary" :disabled="loading" @click="fetchBeans">
+            刷新
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <div class="content-grid">
+      <section class="list-panel">
+        <div class="section-heading">
+          <div>
+            <h2>咖啡豆列表</h2>
+            <p>{{ pageState.total }} 条记录</p>
+          </div>
+
+          <label class="page-size">
+            <span>每页</span>
+            <select v-model.number="filters.pageSize" :disabled="loading" @change="changePageSize">
+              <option :value="10">10</option>
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+          </label>
+        </div>
+
+        <p v-if="error" class="alert error">{{ error }}</p>
+        <p v-if="notice" class="alert success">{{ notice }}</p>
+
+        <div v-if="loading" class="state-box">正在加载咖啡豆列表...</div>
+        <div v-else-if="!hasRows" class="state-box empty">暂无咖啡豆数据。</div>
+        <div v-else class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>产地</th>
+                <th>处理法</th>
+                <th>烘焙度</th>
+                <th>烘焙日期</th>
+                <th>状态</th>
+                <th>封面链接</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="bean in beans" :key="bean.id">
+                <td>
+                  <strong>{{ bean.name }}</strong>
+                  <span>{{ display(bean.roaster) }}</span>
+                </td>
+                <td>
+                  {{ display(bean.origin) }}
+                  <span>{{ display(bean.region) }}</span>
+                </td>
+                <td>{{ display(bean.processMethod) }}</td>
+                <td>{{ display(bean.roastLevel) }}</td>
+                <td>{{ display(bean.roastDate) }}</td>
+                <td>{{ display(bean.status) }}</td>
+                <td>
+                  <a
+                    v-if="bean.coverImageUrl"
+                    class="cover-link"
+                    :href="bean.coverImageUrl"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    查看
+                  </a>
+                  <span v-else>-</span>
+                </td>
+                <td>
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="secondary"
+                      :disabled="saving || deletingId !== null"
+                      @click="startEdit(bean)"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      class="danger"
+                      :disabled="deletingId === bean.id"
+                      @click="confirmDelete(bean)"
+                    >
+                      {{ deletingId === bean.id ? '删除中' : '删除' }}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="pageState.total > 0" class="pagination">
+          <button type="button" class="secondary" :disabled="!canGoPrevious" @click="changePage(filters.page - 1)">
+            上一页
+          </button>
+          <span>第 {{ filters.page }} / {{ effectiveTotalPages }} 页</span>
+          <button type="button" class="secondary" :disabled="!canGoNext" @click="changePage(filters.page + 1)">
+            下一页
+          </button>
+        </div>
+      </section>
+
+      <aside class="form-panel">
+        <div class="section-heading">
+          <div>
+            <h2>{{ formTitle }}</h2>
+            <p v-if="editingId">ID: {{ editingId }}</p>
+            <p v-else>保存后自动刷新列表</p>
+          </div>
+          <button type="button" class="secondary" @click="startCreate">新建</button>
+        </div>
+
+        <form class="bean-form" @submit.prevent="submitForm">
+          <label class="field wide">
+            <span>名称 *</span>
+            <input v-model.trim="form.name" type="text" maxlength="128" required />
+          </label>
+
+          <label class="field">
+            <span>产地</span>
+            <input v-model.trim="form.origin" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>产区</span>
+            <input v-model.trim="form.region" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>庄园 / 农场</span>
+            <input v-model.trim="form.farm" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>品种</span>
+            <input v-model.trim="form.variety" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>处理法</span>
+            <input v-model.trim="form.processMethod" type="text" maxlength="64" />
+          </label>
+
+          <label class="field">
+            <span>烘焙度</span>
+            <input v-model.trim="form.roastLevel" type="text" maxlength="64" />
+          </label>
+
+          <label class="field">
+            <span>烘焙商</span>
+            <input v-model.trim="form.roaster" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>净含量 g</span>
+            <input v-model.trim="form.netWeightGrams" type="number" min="0.01" step="0.01" />
+          </label>
+
+          <label class="field">
+            <span>价格</span>
+            <input v-model.trim="form.price" type="number" min="0" step="0.01" />
+          </label>
+
+          <label class="field">
+            <span>币种</span>
+            <input v-model.trim="form.currency" type="text" maxlength="16" />
+          </label>
+
+          <label class="field">
+            <span>状态</span>
+            <select v-model="form.status">
+              <option value="UNOPENED">UNOPENED</option>
+              <option value="OPENED">OPENED</option>
+              <option value="FINISHED">FINISHED</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>烘焙日期</span>
+            <input v-model="form.roastDate" type="date" />
+          </label>
+
+          <label class="field">
+            <span>购买日期</span>
+            <input v-model="form.purchaseDate" type="date" />
+          </label>
+
+          <label class="field">
+            <span>开封日期</span>
+            <input v-model="form.openDate" type="date" />
+          </label>
+
+          <label class="field">
+            <span>喝完日期</span>
+            <input v-model="form.finishDate" type="date" />
+          </label>
+
+          <label class="field wide">
+            <span>封面 URL</span>
+            <input v-model.trim="form.coverImageUrl" type="url" maxlength="500" />
+          </label>
+
+          <label class="field wide">
+            <span>备注</span>
+            <textarea v-model.trim="form.notes" rows="4"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" :disabled="saving">{{ submitText }}</button>
+            <button type="button" class="secondary" :disabled="saving" @click="resetForm">清空</button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  </main>
+</template>
