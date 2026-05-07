@@ -22,3 +22,22 @@ docs/      产品、数据库、接口设计文档
 1. 配置 `backend/src/main/resources/application.yml` 中的数据库账号密码。
 2. 在 `frontend` 目录安装依赖并启动开发服务。
 3. 根据 `docs` 下的设计文档继续补充实体、接口和页面。
+
+## Connectivity Check
+
+后端启动：
+
+```bash
+cd backend
+mvn spring-boot:run
+```
+
+前端启动：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+打开 `http://localhost:5173`，页面应显示后端返回的 `hello world`。
