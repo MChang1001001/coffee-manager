@@ -16,7 +16,6 @@ docs/      产品、数据库、接口设计文档
 - Maven 3.9+
 - Node.js 20+
 - MySQL 8+
-- Docker Desktop（可选，用于启动 MySQL）
 
 ## Next Steps
 
