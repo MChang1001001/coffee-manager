@@ -112,8 +112,7 @@ a:hover {
 
 .page-hero,
 .filter-bar,
-.list-panel,
-.form-panel {
+.list-panel {
   border: 1px solid #dce3e1;
   border-radius: 8px;
   background: #ffffff;
@@ -165,6 +164,12 @@ td span {
   margin-bottom: 0;
 }
 
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
 .user-status {
   display: grid;
   gap: 4px;
@@ -179,8 +184,7 @@ td span {
 }
 
 .filter-bar,
-.list-panel,
-.form-panel {
+.list-panel {
   padding: 18px;
 }
 
@@ -237,13 +241,6 @@ textarea:focus {
 
 .filter-actions {
   flex-wrap: wrap;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
-  gap: 18px;
-  align-items: start;
 }
 
 .section-heading {
@@ -388,9 +385,66 @@ td span {
   margin-top: 4px;
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  background: rgb(17 24 39 / 48%);
+  padding: 24px;
+}
+
+.dialog-panel {
+  width: min(900px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  border: 1px solid #cfd8d5;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 24%);
+  padding: 20px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.dialog-header p {
+  margin-bottom: 0;
+  color: #66766f;
+  font-size: 13px;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  place-items: center;
+  border: 1px solid #cfd8d5;
+  background: #ffffff;
+  color: #40524d;
+  font-size: 24px;
+  line-height: 1;
+  padding: 0;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: #eef5f2;
+}
+
+.form-alert {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 @media (max-width: 1180px) {
-  .filter-form,
-  .content-grid {
+  .filter-form {
     grid-template-columns: 1fr;
   }
 }
@@ -410,6 +464,20 @@ td span {
     padding-left: 0;
     padding-top: 16px;
     text-align: left;
+  }
+
+  .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dialog-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .dialog-panel {
+    max-height: calc(100vh - 24px);
   }
 
   .bean-form {

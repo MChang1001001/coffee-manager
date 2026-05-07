@@ -65,10 +65,13 @@ const beans = ref<CoffeeBeanListItem[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const deletingId = ref<number | null>(null)
+const editingLoadingId = ref<number | null>(null)
 const error = ref('')
+const formError = ref('')
 const notice = ref('')
 const formMode = ref<'create' | 'edit'>('create')
 const editingId = ref<number | null>(null)
+const isDialogOpen = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -87,6 +90,13 @@ const pageState = reactive({
 const form = reactive<CoffeeBeanForm>({ ...defaultForm })
 
 const formTitle = computed(() => (formMode.value === 'edit' ? '编辑咖啡豆' : '新增咖啡豆'))
+const formDescription = computed(() => {
+  if (formMode.value === 'edit' && editingId.value !== null) {
+    return `ID: ${editingId.value}`
+  }
+
+  return '保存后自动刷新列表'
+})
 const submitText = computed(() => {
   if (saving.value) {
     return '保存中'
@@ -197,26 +207,33 @@ function changePageSize() {
 
 function startCreate() {
   error.value = ''
+  formError.value = ''
   notice.value = ''
   resetForm()
+  isDialogOpen.value = true
 }
 
 async function startEdit(bean: CoffeeBeanListItem) {
   error.value = ''
+  formError.value = ''
   notice.value = ''
+  editingLoadingId.value = bean.id
 
   try {
     const detail = await getCoffeeBean(bean.id)
     editingId.value = bean.id
     formMode.value = 'edit'
     fillForm(detail)
+    isDialogOpen.value = true
   } catch (caughtError) {
     error.value = getRequestErrorMessage(caughtError)
+  } finally {
+    editingLoadingId.value = null
   }
 }
 
 async function submitForm() {
-  error.value = ''
+  formError.value = ''
   notice.value = ''
 
   let payload: CoffeeBeanPayload
@@ -224,25 +241,27 @@ async function submitForm() {
   try {
     payload = toPayload()
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    formError.value = getRequestErrorMessage(caughtError)
     return
   }
 
   saving.value = true
 
   try {
+    const successMessage = formMode.value === 'edit' ? '咖啡豆已更新。' : '咖啡豆已新增。'
+
     if (formMode.value === 'edit' && editingId.value !== null) {
       await updateCoffeeBean(editingId.value, payload)
-      notice.value = '咖啡豆已更新。'
     } else {
       await createCoffeeBean(payload)
-      notice.value = '咖啡豆已新增。'
     }
 
+    isDialogOpen.value = false
     resetForm()
+    notice.value = successMessage
     await fetchBeans()
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    formError.value = getRequestErrorMessage(caughtError)
   } finally {
     saving.value = false
   }
@@ -263,7 +282,7 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
     await deleteCoffeeBean(bean.id)
 
     if (editingId.value === bean.id) {
-      resetForm()
+      closeDialog()
     }
 
     notice.value = '咖啡豆已删除。'
@@ -273,6 +292,16 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
   } finally {
     deletingId.value = null
   }
+}
+
+function closeDialog() {
+  if (saving.value) {
+    return
+  }
+
+  isDialogOpen.value = false
+  formError.value = ''
+  resetForm()
 }
 
 function fillForm(detail: CoffeeBeanDetail) {
@@ -396,9 +425,12 @@ function display(value: string | number | null | undefined) {
         <h1>咖啡豆档案</h1>
         <p class="subtitle">基础信息、包装链接和入库状态。</p>
       </div>
-      <div class="user-status">
-        <span>当前用户</span>
-        <strong>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</strong>
+      <div class="hero-actions">
+        <button type="button" @click="startCreate">新增咖啡豆</button>
+        <div class="user-status">
+          <span>当前用户</span>
+          <strong>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</strong>
+        </div>
       </div>
     </section>
 
@@ -436,116 +468,125 @@ function display(value: string | number | null | undefined) {
       </form>
     </section>
 
-    <div class="content-grid">
-      <section class="list-panel">
-        <div class="section-heading">
-          <div>
-            <h2>咖啡豆列表</h2>
-            <p>{{ pageState.total }} 条记录</p>
-          </div>
-
-          <label class="page-size">
-            <span>每页</span>
-            <select v-model.number="filters.pageSize" :disabled="loading" @change="changePageSize">
-              <option :value="10">10</option>
-              <option :value="20">20</option>
-              <option :value="50">50</option>
-            </select>
-          </label>
+    <section class="list-panel">
+      <div class="section-heading">
+        <div>
+          <h2>咖啡豆列表</h2>
+          <p>{{ pageState.total }} 条记录</p>
         </div>
 
-        <p v-if="error" class="alert error">{{ error }}</p>
-        <p v-if="notice" class="alert success">{{ notice }}</p>
+        <label class="page-size">
+          <span>每页</span>
+          <select v-model.number="filters.pageSize" :disabled="loading" @change="changePageSize">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+          </select>
+        </label>
+      </div>
 
-        <div v-if="loading" class="state-box">正在加载咖啡豆列表...</div>
-        <div v-else-if="!hasRows" class="state-box empty">暂无咖啡豆数据。</div>
-        <div v-else class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>产地</th>
-                <th>处理法</th>
-                <th>烘焙度</th>
-                <th>烘焙日期</th>
-                <th>状态</th>
-                <th>封面链接</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="bean in beans" :key="bean.id">
-                <td>
-                  <strong>{{ bean.name }}</strong>
-                  <span>{{ display(bean.roaster) }}</span>
-                </td>
-                <td>
-                  {{ display(bean.origin) }}
-                  <span>{{ display(bean.region) }}</span>
-                </td>
-                <td>{{ display(bean.processMethod) }}</td>
-                <td>{{ display(bean.roastLevel) }}</td>
-                <td>{{ display(bean.roastDate) }}</td>
-                <td>{{ display(bean.status) }}</td>
-                <td>
-                  <a
-                    v-if="bean.coverImageUrl"
-                    class="cover-link"
-                    :href="bean.coverImageUrl"
-                    target="_blank"
-                    rel="noreferrer"
+      <p v-if="error" class="alert error">{{ error }}</p>
+      <p v-if="notice" class="alert success">{{ notice }}</p>
+
+      <div v-if="loading" class="state-box">正在加载咖啡豆列表...</div>
+      <div v-else-if="!hasRows" class="state-box empty">暂无咖啡豆数据。</div>
+      <div v-else class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>产地</th>
+              <th>处理法</th>
+              <th>烘焙度</th>
+              <th>烘焙日期</th>
+              <th>状态</th>
+              <th>封面链接</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="bean in beans" :key="bean.id">
+              <td>
+                <strong>{{ bean.name }}</strong>
+                <span>{{ display(bean.roaster) }}</span>
+              </td>
+              <td>
+                {{ display(bean.origin) }}
+                <span>{{ display(bean.region) }}</span>
+              </td>
+              <td>{{ display(bean.processMethod) }}</td>
+              <td>{{ display(bean.roastLevel) }}</td>
+              <td>{{ display(bean.roastDate) }}</td>
+              <td>{{ display(bean.status) }}</td>
+              <td>
+                <a
+                  v-if="bean.coverImageUrl"
+                  class="cover-link"
+                  :href="bean.coverImageUrl"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  查看
+                </a>
+                <span v-else>-</span>
+              </td>
+              <td>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="secondary"
+                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                    @click="startEdit(bean)"
                   >
-                    查看
-                  </a>
-                  <span v-else>-</span>
-                </td>
-                <td>
-                  <div class="row-actions">
-                    <button
-                      type="button"
-                      class="secondary"
-                      :disabled="saving || deletingId !== null"
-                      @click="startEdit(bean)"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      class="danger"
-                      :disabled="deletingId === bean.id"
-                      @click="confirmDelete(bean)"
-                    >
-                      {{ deletingId === bean.id ? '删除中' : '删除' }}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                    {{ editingLoadingId === bean.id ? '加载中' : '编辑' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="danger"
+                    :disabled="deletingId === bean.id"
+                    @click="confirmDelete(bean)"
+                  >
+                    {{ deletingId === bean.id ? '删除中' : '删除' }}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-        <div v-if="pageState.total > 0" class="pagination">
-          <button type="button" class="secondary" :disabled="!canGoPrevious" @click="changePage(filters.page - 1)">
-            上一页
-          </button>
-          <span>第 {{ filters.page }} / {{ effectiveTotalPages }} 页</span>
-          <button type="button" class="secondary" :disabled="!canGoNext" @click="changePage(filters.page + 1)">
-            下一页
-          </button>
-        </div>
-      </section>
+      <div v-if="pageState.total > 0" class="pagination">
+        <button type="button" class="secondary" :disabled="!canGoPrevious" @click="changePage(filters.page - 1)">
+          上一页
+        </button>
+        <span>第 {{ filters.page }} / {{ effectiveTotalPages }} 页</span>
+        <button type="button" class="secondary" :disabled="!canGoNext" @click="changePage(filters.page + 1)">
+          下一页
+        </button>
+      </div>
+    </section>
 
-      <aside class="form-panel">
-        <div class="section-heading">
+    <div v-if="isDialogOpen" class="dialog-backdrop" role="presentation" @click.self="closeDialog">
+      <section
+        class="dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coffee-dialog-title"
+        aria-describedby="coffee-dialog-description"
+      >
+        <header class="dialog-header">
           <div>
-            <h2>{{ formTitle }}</h2>
-            <p v-if="editingId">ID: {{ editingId }}</p>
-            <p v-else>保存后自动刷新列表</p>
+            <h2 id="coffee-dialog-title">{{ formTitle }}</h2>
+            <p id="coffee-dialog-description">{{ formDescription }}</p>
           </div>
-          <button type="button" class="secondary" @click="startCreate">新建</button>
-        </div>
+          <button type="button" class="icon-button" :disabled="saving" aria-label="关闭" @click="closeDialog">
+            ×
+          </button>
+        </header>
 
         <form class="bean-form" @submit.prevent="submitForm">
+          <p v-if="formError" class="alert error form-alert">{{ formError }}</p>
+
           <label class="field wide">
             <span>名称 *</span>
             <input v-model.trim="form.name" type="text" maxlength="128" required />
@@ -641,11 +682,11 @@ function display(value: string | number | null | undefined) {
           </label>
 
           <div class="form-actions">
+            <button type="button" class="secondary" :disabled="saving" @click="closeDialog">取消</button>
             <button type="submit" :disabled="saving">{{ submitText }}</button>
-            <button type="button" class="secondary" :disabled="saving" @click="resetForm">清空</button>
           </div>
         </form>
-      </aside>
+      </section>
     </div>
   </main>
 </template>
