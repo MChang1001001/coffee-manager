@@ -27,3 +27,5 @@ logs/
 # Runtime / secrets
 .env
 *.local
+uploads/
+backend/uploads/

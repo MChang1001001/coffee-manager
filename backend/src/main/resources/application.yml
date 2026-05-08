@@ -36,7 +36,13 @@ mybatis-plus:
 app:
   file:
     upload-path: ${FILE_UPLOAD_PATH:uploads}
-    public-prefix: /files
+    public-prefix: /uploads
+    coffee-cover-directory: coffee-covers
+    max-size: 5MB
+    allowed-content-types:
+      - image/jpeg
+      - image/png
+      - image/webp
   jwt:
     secret: ${JWT_SECRET:coffee-manager-dev-secret-key-change-me-20260507-min-32-bytes}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:604800}

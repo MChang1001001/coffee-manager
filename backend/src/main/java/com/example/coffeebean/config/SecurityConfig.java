@@ -27,7 +27,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectMapper objectMapper) throws Exception {
+            ObjectMapper objectMapper,
+            FileStorageProperties fileStorageProperties) throws Exception {
+        String publicFilePattern = normalizePublicPrefix(fileStorageProperties.getPublicPrefix()) + "/**";
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
@@ -40,7 +42,7 @@ public class SecurityConfig {
                     objectMapper.writeValue(response.getWriter(), ApiResponse.fail(ErrorCode.UNAUTHORIZED));
                 }))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/health", "/files/**").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/health", publicFilePattern).permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -50,5 +52,19 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    private String normalizePublicPrefix(String publicPrefix) {
+        if (publicPrefix == null || publicPrefix.isBlank()) {
+            return "/uploads";
+        }
+        String normalized = publicPrefix.trim();
+        if (!normalized.startsWith("/")) {
+            normalized = "/" + normalized;
+        }
+        while (normalized.length() > 1 && normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }

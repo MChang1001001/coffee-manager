@@ -9,6 +9,7 @@ import {
   listCoffeeBeans,
   updateCoffeeBean,
 } from '../api/coffee'
+import { uploadCoffeeCover } from '../api/file'
 import type {
   CoffeeBeanDetail,
   CoffeeBeanListItem,
@@ -64,10 +65,13 @@ const currentUser = ref<UserProfile | null>(null)
 const beans = ref<CoffeeBeanListItem[]>([])
 const loading = ref(false)
 const saving = ref(false)
+const coverUploading = ref(false)
 const deletingId = ref<number | null>(null)
 const editingLoadingId = ref<number | null>(null)
 const error = ref('')
 const formError = ref('')
+const coverUploadError = ref('')
+const coverUploadNotice = ref('')
 const notice = ref('')
 const formMode = ref<'create' | 'edit'>('create')
 const editingId = ref<number | null>(null)
@@ -100,6 +104,10 @@ const formDescription = computed(() => {
 const submitText = computed(() => {
   if (saving.value) {
     return '保存中'
+  }
+
+  if (coverUploading.value) {
+    return '封面上传中'
   }
 
   return formMode.value === 'edit' ? '保存修改' : '新增咖啡豆'
@@ -208,6 +216,7 @@ function changePageSize() {
 function startCreate() {
   error.value = ''
   formError.value = ''
+  resetCoverUploadState()
   notice.value = ''
   resetForm()
   isDialogOpen.value = true
@@ -216,6 +225,7 @@ function startCreate() {
 async function startEdit(bean: CoffeeBeanListItem) {
   error.value = ''
   formError.value = ''
+  resetCoverUploadState()
   notice.value = ''
   editingLoadingId.value = bean.id
 
@@ -235,6 +245,11 @@ async function startEdit(bean: CoffeeBeanListItem) {
 async function submitForm() {
   formError.value = ''
   notice.value = ''
+
+  if (coverUploading.value) {
+    formError.value = '封面仍在上传中，请上传完成后再保存。'
+    return
+  }
 
   let payload: CoffeeBeanPayload
 
@@ -295,7 +310,7 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
 }
 
 function closeDialog() {
-  if (saving.value) {
+  if (saving.value || coverUploading.value) {
     return
   }
 
@@ -331,6 +346,54 @@ function resetForm() {
   Object.assign(form, defaultForm)
   editingId.value = null
   formMode.value = 'create'
+  resetCoverUploadState()
+}
+
+async function handleCoverFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file) {
+    return
+  }
+
+  coverUploadError.value = ''
+  coverUploadNotice.value = ''
+  formError.value = ''
+
+  if (file.type && !file.type.startsWith('image/')) {
+    coverUploadError.value = '请选择图片文件。'
+    input.value = ''
+    return
+  }
+
+  coverUploading.value = true
+
+  try {
+    const uploaded = await uploadCoffeeCover(file)
+
+    if (!uploaded.url) {
+      throw new Error('上传成功，但后端未返回封面 URL。')
+    }
+
+    form.coverImageUrl = uploaded.url
+    coverUploadNotice.value = '封面上传成功，已写入封面 URL。'
+  } catch (caughtError) {
+    coverUploadError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    coverUploading.value = false
+    input.value = ''
+  }
+}
+
+function clearCoverImage() {
+  form.coverImageUrl = ''
+  resetCoverUploadState()
+}
+
+function resetCoverUploadState() {
+  coverUploadError.value = ''
+  coverUploadNotice.value = ''
 }
 
 function toPayload(): CoffeeBeanPayload {
@@ -500,7 +563,7 @@ function display(value: string | number | null | undefined) {
               <th>烘焙度</th>
               <th>烘焙日期</th>
               <th>状态</th>
-              <th>封面链接</th>
+              <th>封面</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -521,12 +584,13 @@ function display(value: string | number | null | undefined) {
               <td>
                 <a
                   v-if="bean.coverImageUrl"
-                  class="cover-link"
+                  class="cover-cell"
                   :href="bean.coverImageUrl"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  查看
+                  <img class="cover-thumb" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
+                  <span class="cover-link">查看</span>
                 </a>
                 <span v-else>-</span>
               </td>
@@ -579,7 +643,13 @@ function display(value: string | number | null | undefined) {
             <h2 id="coffee-dialog-title">{{ formTitle }}</h2>
             <p id="coffee-dialog-description">{{ formDescription }}</p>
           </div>
-          <button type="button" class="icon-button" :disabled="saving" aria-label="关闭" @click="closeDialog">
+          <button
+            type="button"
+            class="icon-button"
+            :disabled="saving || coverUploading"
+            aria-label="关闭"
+            @click="closeDialog"
+          >
             ×
           </button>
         </header>
@@ -671,10 +741,45 @@ function display(value: string | number | null | undefined) {
             <input v-model="form.finishDate" type="date" />
           </label>
 
-          <label class="field wide">
-            <span>封面 URL</span>
-            <input v-model.trim="form.coverImageUrl" type="url" maxlength="500" />
-          </label>
+          <div class="cover-upload wide">
+            <div class="cover-upload-header">
+              <span>封面图片</span>
+              <button
+                v-if="form.coverImageUrl"
+                type="button"
+                class="secondary compact-button"
+                :disabled="saving || coverUploading"
+                @click="clearCoverImage"
+              >
+                清空
+              </button>
+            </div>
+
+            <div class="cover-upload-body">
+              <div class="cover-preview" :class="{ empty: !form.coverImageUrl }">
+                <img v-if="form.coverImageUrl" :src="form.coverImageUrl" alt="咖啡豆封面预览" />
+                <span v-else>暂无封面</span>
+              </div>
+
+              <div class="cover-upload-controls">
+                <input
+                  type="file"
+                  accept="image/*"
+                  :disabled="saving || coverUploading"
+                  @change="handleCoverFileChange"
+                />
+                <p v-if="coverUploading" class="upload-status">封面上传中...</p>
+                <p v-else class="upload-hint">上传成功后会自动写入封面 URL。</p>
+                <p v-if="coverUploadError" class="inline-error">{{ coverUploadError }}</p>
+                <p v-if="coverUploadNotice" class="inline-success">{{ coverUploadNotice }}</p>
+              </div>
+            </div>
+
+            <label class="field cover-url-field">
+              <span>封面 URL</span>
+              <input v-model.trim="form.coverImageUrl" type="text" maxlength="500" />
+            </label>
+          </div>
 
           <label class="field wide">
             <span>备注</span>
@@ -682,8 +787,10 @@ function display(value: string | number | null | undefined) {
           </label>
 
           <div class="form-actions">
-            <button type="button" class="secondary" :disabled="saving" @click="closeDialog">取消</button>
-            <button type="submit" :disabled="saving">{{ submitText }}</button>
+            <button type="button" class="secondary" :disabled="saving || coverUploading" @click="closeDialog">
+              取消
+            </button>
+            <button type="submit" :disabled="saving || coverUploading">{{ submitText }}</button>
           </div>
         </form>
       </section>
