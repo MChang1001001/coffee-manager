@@ -131,6 +131,7 @@ const reviewNotice = ref('')
 const reviewMode = ref<'create' | 'edit'>('create')
 const editingReviewId = ref<number | null>(null)
 const isReviewDialogOpen = ref(false)
+const isReviewFormDialogOpen = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -368,6 +369,7 @@ function startCreateReview() {
   resetReviewForm()
   reviewFormError.value = ''
   reviewNotice.value = ''
+  isReviewFormDialogOpen.value = true
 }
 
 function startEditReview(review: CoffeeReview) {
@@ -376,6 +378,7 @@ function startEditReview(review: CoffeeReview) {
   reviewFormError.value = ''
   reviewNotice.value = ''
   fillReviewForm(review)
+  isReviewFormDialogOpen.value = true
 }
 
 async function submitReviewForm() {
@@ -407,6 +410,7 @@ async function submitReviewForm() {
       reviewNotice.value = '评价已新增。'
     }
 
+    isReviewFormDialogOpen.value = false
     resetReviewForm()
     await fetchReviews()
   } catch (caughtError) {
@@ -450,11 +454,22 @@ function closeReviewDialog() {
   }
 
   isReviewDialogOpen.value = false
+  isReviewFormDialogOpen.value = false
   selectedReviewBean.value = null
   reviews.value = []
   reviewPageState.total = 0
   reviewPageState.totalPages = 0
   resetReviewState()
+}
+
+function closeReviewFormDialog() {
+  if (reviewSaving.value) {
+    return
+  }
+
+  isReviewFormDialogOpen.value = false
+  reviewFormError.value = ''
+  resetReviewForm()
 }
 
 function startCreate() {
@@ -1169,113 +1184,142 @@ function display(value: string | number | null | undefined) {
           </button>
         </header>
 
-        <div class="review-layout">
-          <section class="review-form-panel">
-            <h3>{{ reviewFormTitle }}</h3>
-
-            <form class="review-form" @submit.prevent="submitReviewForm">
-              <p v-if="reviewFormError" class="alert error form-alert">{{ reviewFormError }}</p>
-
-              <div class="review-rating-fields">
-                <label v-for="field in reviewRatingFields" :key="field.key" class="field">
-                  <span>{{ field.label }}</span>
-                  <input
-                    v-model.trim="reviewForm[field.key]"
-                    type="number"
-                    min="0"
-                    max="5"
-                    step="0.5"
-                    :required="field.required"
-                  />
-                </label>
-              </div>
-
-              <label class="field">
-                <span>文本评价</span>
-                <textarea v-model.trim="reviewForm.content" rows="5" maxlength="2000"></textarea>
-              </label>
-
-              <div class="form-actions">
-                <button type="button" class="secondary" :disabled="reviewSaving" @click="startCreateReview">
-                  {{ reviewMode === 'edit' ? '取消编辑' : '清空' }}
-                </button>
-                <button type="submit" :disabled="reviewSaving">{{ reviewSubmitText }}</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="review-list-panel">
-            <div class="review-list-header">
-              <h3>评价列表</h3>
+        <section class="review-list-panel">
+          <div class="review-list-header">
+            <h3>评价列表</h3>
+            <div class="row-actions">
+              <button type="button" :disabled="reviewLoading" @click="startCreateReview">
+                新增评价
+              </button>
               <button type="button" class="secondary compact-button" :disabled="reviewLoading" @click="fetchReviews">
                 刷新
               </button>
             </div>
+          </div>
 
-            <p v-if="reviewError" class="alert error">{{ reviewError }}</p>
-            <p v-if="reviewNotice" class="alert success">{{ reviewNotice }}</p>
+          <p v-if="reviewError" class="alert error">{{ reviewError }}</p>
+          <p v-if="reviewNotice" class="alert success">{{ reviewNotice }}</p>
 
-            <div v-if="reviewLoading" class="state-box review-state">正在加载评价...</div>
-            <div v-else-if="!hasReviews" class="state-box empty review-state">暂无评价。</div>
-            <div v-else class="review-list">
-              <article v-for="review in reviews" :key="review.id" class="review-card">
-                <header class="review-card-header">
-                  <div>
-                    <strong>综合 {{ display(review.overallRating) }}</strong>
-                    <span>{{ display(review.createdAt) }}</span>
-                  </div>
-                  <div class="row-actions">
-                    <button
-                      type="button"
-                      class="secondary compact-button"
-                      :disabled="reviewSaving || reviewDeletingId !== null"
-                      @click="startEditReview(review)"
-                    >
-                      编辑
-                    </button>
-                    <button
-                      type="button"
-                      class="danger compact-button"
-                      :disabled="reviewDeletingId === review.id"
-                      @click="confirmDeleteReview(review)"
-                    >
-                      {{ reviewDeletingId === review.id ? '删除中' : '删除' }}
-                    </button>
-                  </div>
-                </header>
+          <div v-if="reviewLoading" class="state-box review-state">正在加载评价...</div>
+          <div v-else-if="!hasReviews" class="state-box empty review-state">暂无评价。</div>
+          <div v-else class="review-list">
+            <article v-for="review in reviews" :key="review.id" class="review-card">
+              <header class="review-card-header">
+                <div>
+                  <strong>综合 {{ display(review.overallRating) }}</strong>
+                  <span>{{ display(review.createdAt) }}</span>
+                </div>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="secondary compact-button"
+                    :disabled="reviewSaving || reviewDeletingId !== null"
+                    @click="startEditReview(review)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    class="danger compact-button"
+                    :disabled="reviewDeletingId === review.id"
+                    @click="confirmDeleteReview(review)"
+                  >
+                    {{ reviewDeletingId === review.id ? '删除中' : '删除' }}
+                  </button>
+                </div>
+              </header>
 
-                <dl class="review-rating-list">
-                  <div v-for="field in reviewDimensionFields" :key="field.key">
-                    <dt>{{ field.label.replace('评分', '') }}</dt>
-                    <dd>{{ display(review[field.key]) }}</dd>
-                  </div>
-                </dl>
+              <dl class="review-rating-list">
+                <div v-for="field in reviewDimensionFields" :key="field.key">
+                  <dt>{{ field.label.replace('评分', '') }}</dt>
+                  <dd>{{ display(review[field.key]) }}</dd>
+                </div>
+              </dl>
 
-                <p class="review-content">{{ display(review.content) }}</p>
-              </article>
-            </div>
+              <p class="review-content">{{ display(review.content) }}</p>
+            </article>
+          </div>
 
-            <div v-if="reviewPageState.total > 0" class="pagination review-pagination">
-              <button
-                type="button"
-                class="secondary"
-                :disabled="!canReviewGoPrevious"
-                @click="changeReviewPage(reviewQuery.page - 1)"
-              >
-                上一页
-              </button>
-              <span>第 {{ reviewQuery.page }} / {{ effectiveReviewTotalPages }} 页</span>
-              <button
-                type="button"
-                class="secondary"
-                :disabled="!canReviewGoNext"
-                @click="changeReviewPage(reviewQuery.page + 1)"
-              >
-                下一页
-              </button>
-            </div>
-          </section>
-        </div>
+          <div v-if="reviewPageState.total > 0" class="pagination review-pagination">
+            <button
+              type="button"
+              class="secondary"
+              :disabled="!canReviewGoPrevious"
+              @click="changeReviewPage(reviewQuery.page - 1)"
+            >
+              上一页
+            </button>
+            <span>第 {{ reviewQuery.page }} / {{ effectiveReviewTotalPages }} 页</span>
+            <button
+              type="button"
+              class="secondary"
+              :disabled="!canReviewGoNext"
+              @click="changeReviewPage(reviewQuery.page + 1)"
+            >
+              下一页
+            </button>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <div
+      v-if="isReviewFormDialogOpen"
+      class="dialog-backdrop"
+      role="presentation"
+      @click.self="closeReviewFormDialog"
+    >
+      <section
+        class="dialog-panel review-form-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-form-dialog-title"
+      >
+        <header class="dialog-header">
+          <div>
+            <h2 id="review-form-dialog-title">{{ reviewFormTitle }}</h2>
+            <p>{{ selectedReviewBean?.name || '咖啡豆评价' }}</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            :disabled="reviewSaving"
+            aria-label="关闭评价表单"
+            @click="closeReviewFormDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <form class="review-form" @submit.prevent="submitReviewForm">
+          <p v-if="reviewFormError" class="alert error form-alert">{{ reviewFormError }}</p>
+
+          <div class="review-rating-fields">
+            <label v-for="field in reviewRatingFields" :key="field.key" class="field">
+              <span>{{ field.label }}</span>
+              <input
+                v-model.trim="reviewForm[field.key]"
+                type="number"
+                min="0"
+                max="5"
+                step="0.5"
+                :required="field.required"
+              />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>文本评价</span>
+            <textarea v-model.trim="reviewForm.content" rows="5" maxlength="2000"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="button" class="secondary" :disabled="reviewSaving" @click="closeReviewFormDialog">
+              取消
+            </button>
+            <button type="submit" :disabled="reviewSaving">{{ reviewSubmitText }}</button>
+          </div>
+        </form>
       </section>
     </div>
 
