@@ -10,6 +10,12 @@ import {
   updateCoffeeBean,
 } from '../api/coffee'
 import { uploadCoffeeCover } from '../api/file'
+import {
+  createCoffeeReview,
+  deleteCoffeeReview,
+  listCoffeeReviews,
+  updateCoffeeReview,
+} from '../api/review'
 import type {
   CoffeeBeanDetail,
   CoffeeBeanListItem,
@@ -17,6 +23,7 @@ import type {
   CoffeeBeanQuery,
   PageResponse,
 } from '../api/coffee'
+import type { CoffeeReview, CoffeeReviewPayload } from '../api/review'
 import { getRequestErrorMessage } from '../api/request'
 
 interface CoffeeBeanForm {
@@ -40,6 +47,19 @@ interface CoffeeBeanForm {
   notes: string
 }
 
+interface ReviewForm {
+  overallRating: string | number
+  aromaRating: string | number
+  acidityRating: string | number
+  sweetnessRating: string | number
+  bitternessRating: string | number
+  bodyRating: string | number
+  aftertasteRating: string | number
+  content: string
+}
+
+type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
+
 const defaultForm: CoffeeBeanForm = {
   name: '',
   origin: '',
@@ -61,6 +81,29 @@ const defaultForm: CoffeeBeanForm = {
   notes: '',
 }
 
+const defaultReviewForm: ReviewForm = {
+  overallRating: '',
+  aromaRating: '',
+  acidityRating: '',
+  sweetnessRating: '',
+  bitternessRating: '',
+  bodyRating: '',
+  aftertasteRating: '',
+  content: '',
+}
+
+const reviewRatingFields: Array<{ key: RatingFieldKey; label: string; required?: boolean }> = [
+  { key: 'overallRating', label: '综合评分 *', required: true },
+  { key: 'aromaRating', label: '香气评分' },
+  { key: 'acidityRating', label: '酸度评分' },
+  { key: 'sweetnessRating', label: '甜感评分' },
+  { key: 'bitternessRating', label: '苦感评分' },
+  { key: 'bodyRating', label: '醇厚度评分' },
+  { key: 'aftertasteRating', label: '余韵评分' },
+]
+
+const reviewDimensionFields = reviewRatingFields.filter((field) => field.key !== 'overallRating')
+
 const currentUser = ref<UserProfile | null>(null)
 const beans = ref<CoffeeBeanListItem[]>([])
 const loading = ref(false)
@@ -76,6 +119,18 @@ const notice = ref('')
 const formMode = ref<'create' | 'edit'>('create')
 const editingId = ref<number | null>(null)
 const isDialogOpen = ref(false)
+const previewCover = ref<{ name: string; url: string } | null>(null)
+const selectedReviewBean = ref<CoffeeBeanListItem | null>(null)
+const reviews = ref<CoffeeReview[]>([])
+const reviewLoading = ref(false)
+const reviewSaving = ref(false)
+const reviewDeletingId = ref<number | null>(null)
+const reviewError = ref('')
+const reviewFormError = ref('')
+const reviewNotice = ref('')
+const reviewMode = ref<'create' | 'edit'>('create')
+const editingReviewId = ref<number | null>(null)
+const isReviewDialogOpen = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -92,6 +147,15 @@ const pageState = reactive({
 })
 
 const form = reactive<CoffeeBeanForm>({ ...defaultForm })
+const reviewQuery = reactive({
+  page: 1,
+  pageSize: 20,
+})
+const reviewPageState = reactive({
+  total: 0,
+  totalPages: 0,
+})
+const reviewForm = reactive<ReviewForm>({ ...defaultReviewForm })
 
 const formTitle = computed(() => (formMode.value === 'edit' ? '编辑咖啡豆' : '新增咖啡豆'))
 const formDescription = computed(() => {
@@ -113,6 +177,7 @@ const submitText = computed(() => {
   return formMode.value === 'edit' ? '保存修改' : '新增咖啡豆'
 })
 const hasRows = computed(() => beans.value.length > 0)
+const hasReviews = computed(() => reviews.value.length > 0)
 const effectiveTotalPages = computed(() => {
   if (pageState.total <= 0) {
     return 0
@@ -122,6 +187,32 @@ const effectiveTotalPages = computed(() => {
 })
 const canGoPrevious = computed(() => filters.page > 1 && !loading.value)
 const canGoNext = computed(() => filters.page < effectiveTotalPages.value && !loading.value)
+const reviewDialogTitle = computed(() => {
+  if (!selectedReviewBean.value) {
+    return '咖啡豆评价'
+  }
+
+  return `评价：${selectedReviewBean.value.name}`
+})
+const reviewFormTitle = computed(() => (reviewMode.value === 'edit' ? '编辑评价' : '新增评价'))
+const reviewSubmitText = computed(() => {
+  if (reviewSaving.value) {
+    return '保存中'
+  }
+
+  return reviewMode.value === 'edit' ? '保存修改' : '新增评价'
+})
+const effectiveReviewTotalPages = computed(() => {
+  if (reviewPageState.total <= 0) {
+    return 0
+  }
+
+  return Math.max(1, reviewPageState.totalPages)
+})
+const canReviewGoPrevious = computed(() => reviewQuery.page > 1 && !reviewLoading.value)
+const canReviewGoNext = computed(
+  () => reviewQuery.page < effectiveReviewTotalPages.value && !reviewLoading.value,
+)
 
 onMounted(() => {
   void bootPage()
@@ -213,6 +304,159 @@ function changePageSize() {
   void fetchBeans()
 }
 
+async function openReviewDialog(bean: CoffeeBeanListItem) {
+  error.value = ''
+  notice.value = ''
+  selectedReviewBean.value = bean
+  reviewQuery.page = 1
+  resetReviewState()
+  isReviewDialogOpen.value = true
+  await fetchReviews()
+}
+
+async function fetchReviews() {
+  if (!selectedReviewBean.value) {
+    return
+  }
+
+  reviewLoading.value = true
+  reviewError.value = ''
+
+  try {
+    const page = await listCoffeeReviews(selectedReviewBean.value.id, {
+      page: reviewQuery.page,
+      pageSize: reviewQuery.pageSize,
+    })
+
+    if (reviewQuery.page > 1 && page.items.length === 0 && page.total > 0) {
+      reviewQuery.page = Math.max(1, page.totalPages)
+      applyReviewPage(
+        await listCoffeeReviews(selectedReviewBean.value.id, {
+          page: reviewQuery.page,
+          pageSize: reviewQuery.pageSize,
+        }),
+      )
+      return
+    }
+
+    applyReviewPage(page)
+  } catch (caughtError) {
+    reviewError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+function applyReviewPage(page: PageResponse<CoffeeReview>) {
+  reviews.value = page.items ?? []
+  reviewQuery.page = page.page
+  reviewQuery.pageSize = page.pageSize
+  reviewPageState.total = page.total
+  reviewPageState.totalPages = page.totalPages
+}
+
+function changeReviewPage(page: number) {
+  if (page < 1 || (effectiveReviewTotalPages.value > 0 && page > effectiveReviewTotalPages.value)) {
+    return
+  }
+
+  reviewQuery.page = page
+  void fetchReviews()
+}
+
+function startCreateReview() {
+  resetReviewForm()
+  reviewFormError.value = ''
+  reviewNotice.value = ''
+}
+
+function startEditReview(review: CoffeeReview) {
+  reviewMode.value = 'edit'
+  editingReviewId.value = review.id
+  reviewFormError.value = ''
+  reviewNotice.value = ''
+  fillReviewForm(review)
+}
+
+async function submitReviewForm() {
+  if (!selectedReviewBean.value) {
+    reviewFormError.value = '请先选择咖啡豆。'
+    return
+  }
+
+  reviewFormError.value = ''
+  reviewNotice.value = ''
+
+  let payload: CoffeeReviewPayload
+
+  try {
+    payload = toReviewPayload()
+  } catch (caughtError) {
+    reviewFormError.value = getRequestErrorMessage(caughtError)
+    return
+  }
+
+  reviewSaving.value = true
+
+  try {
+    if (reviewMode.value === 'edit' && editingReviewId.value !== null) {
+      await updateCoffeeReview(editingReviewId.value, payload)
+      reviewNotice.value = '评价已更新。'
+    } else {
+      await createCoffeeReview(selectedReviewBean.value.id, payload)
+      reviewNotice.value = '评价已新增。'
+    }
+
+    resetReviewForm()
+    await fetchReviews()
+  } catch (caughtError) {
+    reviewFormError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    reviewSaving.value = false
+  }
+}
+
+async function confirmDeleteReview(review: CoffeeReview) {
+  const confirmed = window.confirm('确认删除这条评价吗？')
+
+  if (!confirmed) {
+    return
+  }
+
+  reviewError.value = ''
+  reviewFormError.value = ''
+  reviewNotice.value = ''
+  reviewDeletingId.value = review.id
+
+  try {
+    await deleteCoffeeReview(review.id)
+
+    if (editingReviewId.value === review.id) {
+      resetReviewForm()
+    }
+
+    reviewNotice.value = '评价已删除。'
+    await fetchReviews()
+  } catch (caughtError) {
+    reviewError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    reviewDeletingId.value = null
+  }
+}
+
+function closeReviewDialog() {
+  if (reviewSaving.value || reviewDeletingId.value !== null) {
+    return
+  }
+
+  isReviewDialogOpen.value = false
+  selectedReviewBean.value = null
+  reviews.value = []
+  reviewPageState.total = 0
+  reviewPageState.totalPages = 0
+  resetReviewState()
+}
+
 function startCreate() {
   error.value = ''
   formError.value = ''
@@ -298,6 +542,10 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
 
     if (editingId.value === bean.id) {
       closeDialog()
+    }
+
+    if (selectedReviewBean.value?.id === bean.id) {
+      closeReviewDialog()
     }
 
     notice.value = '咖啡豆已删除。'
@@ -396,6 +644,50 @@ function resetCoverUploadState() {
   coverUploadNotice.value = ''
 }
 
+function openCoverPreview(bean: CoffeeBeanListItem) {
+  if (!bean.coverImageUrl) {
+    return
+  }
+
+  previewCover.value = {
+    name: bean.name,
+    url: bean.coverImageUrl,
+  }
+}
+
+function closeCoverPreview() {
+  previewCover.value = null
+}
+
+function resetReviewState() {
+  reviews.value = []
+  reviewPageState.total = 0
+  reviewPageState.totalPages = 0
+  reviewError.value = ''
+  reviewFormError.value = ''
+  reviewNotice.value = ''
+  resetReviewForm()
+}
+
+function resetReviewForm() {
+  Object.assign(reviewForm, defaultReviewForm)
+  editingReviewId.value = null
+  reviewMode.value = 'create'
+}
+
+function fillReviewForm(review: CoffeeReview) {
+  Object.assign(reviewForm, {
+    overallRating: valueToString(review.overallRating),
+    aromaRating: valueToString(review.aromaRating),
+    acidityRating: valueToString(review.acidityRating),
+    sweetnessRating: valueToString(review.sweetnessRating),
+    bitternessRating: valueToString(review.bitternessRating),
+    bodyRating: valueToString(review.bodyRating),
+    aftertasteRating: valueToString(review.aftertasteRating),
+    content: valueToString(review.content),
+  })
+}
+
 function toPayload(): CoffeeBeanPayload {
   const name = form.name.trim()
 
@@ -422,6 +714,19 @@ function toPayload(): CoffeeBeanPayload {
     status: emptyToNull(form.status),
     coverImageUrl: emptyToNull(form.coverImageUrl),
     notes: emptyToNull(form.notes),
+  }
+}
+
+function toReviewPayload(): CoffeeReviewPayload {
+  return {
+    overallRating: requiredRatingNumber(reviewForm.overallRating, '综合评分'),
+    aromaRating: optionalRatingNumber(reviewForm.aromaRating, '香气评分'),
+    acidityRating: optionalRatingNumber(reviewForm.acidityRating, '酸度评分'),
+    sweetnessRating: optionalRatingNumber(reviewForm.sweetnessRating, '甜感评分'),
+    bitternessRating: optionalRatingNumber(reviewForm.bitternessRating, '苦感评分'),
+    bodyRating: optionalRatingNumber(reviewForm.bodyRating, '醇厚度评分'),
+    aftertasteRating: optionalRatingNumber(reviewForm.aftertasteRating, '余韵评分'),
+    content: emptyToNull(reviewForm.content),
   }
 }
 
@@ -473,6 +778,38 @@ function parseOptionalNumber(value: string | number, label: string) {
   }
 
   return parsed
+}
+
+function requiredRatingNumber(value: string | number, label: string) {
+  const parsed = parseOptionalNumber(value, label)
+
+  if (parsed === null) {
+    throw new Error(`${label}不能为空。`)
+  }
+
+  assertRatingRange(parsed, label)
+  return parsed
+}
+
+function optionalRatingNumber(value: string | number, label: string) {
+  const parsed = parseOptionalNumber(value, label)
+
+  if (parsed === null) {
+    return null
+  }
+
+  assertRatingRange(parsed, label)
+  return parsed
+}
+
+function assertRatingRange(value: number, label: string) {
+  if (value < 0 || value > 5) {
+    throw new Error(`${label}必须在 0 到 5 之间。`)
+  }
+
+  if (!Number.isInteger(value * 2)) {
+    throw new Error(`${label}必须以 0.5 为步进。`)
+  }
 }
 
 function display(value: string | number | null | undefined) {
@@ -582,20 +919,27 @@ function display(value: string | number | null | undefined) {
               <td>{{ display(bean.roastDate) }}</td>
               <td>{{ display(bean.status) }}</td>
               <td>
-                <a
+                <button
                   v-if="bean.coverImageUrl"
-                  class="cover-cell"
-                  :href="bean.coverImageUrl"
-                  target="_blank"
-                  rel="noreferrer"
+                  type="button"
+                  class="cover-thumb-button"
+                  :aria-label="`查看 ${bean.name} 封面大图`"
+                  @click="openCoverPreview(bean)"
                 >
                   <img class="cover-thumb" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
-                  <span class="cover-link">查看</span>
-                </a>
+                </button>
                 <span v-else>-</span>
               </td>
               <td>
                 <div class="row-actions">
+                  <button
+                    type="button"
+                    class="secondary"
+                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                    @click="openReviewDialog(bean)"
+                  >
+                    评价
+                  </button>
                   <button
                     type="button"
                     class="secondary"
@@ -793,6 +1137,164 @@ function display(value: string | number | null | undefined) {
             <button type="submit" :disabled="saving || coverUploading">{{ submitText }}</button>
           </div>
         </form>
+      </section>
+    </div>
+
+    <div
+      v-if="isReviewDialogOpen"
+      class="dialog-backdrop"
+      role="presentation"
+      @click.self="closeReviewDialog"
+    >
+      <section
+        class="dialog-panel review-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-dialog-title"
+        aria-describedby="review-dialog-description"
+      >
+        <header class="dialog-header">
+          <div>
+            <h2 id="review-dialog-title">{{ reviewDialogTitle }}</h2>
+            <p id="review-dialog-description">{{ reviewPageState.total }} 条评价</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            :disabled="reviewSaving || reviewDeletingId !== null"
+            aria-label="关闭评价"
+            @click="closeReviewDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <div class="review-layout">
+          <section class="review-form-panel">
+            <h3>{{ reviewFormTitle }}</h3>
+
+            <form class="review-form" @submit.prevent="submitReviewForm">
+              <p v-if="reviewFormError" class="alert error form-alert">{{ reviewFormError }}</p>
+
+              <div class="review-rating-fields">
+                <label v-for="field in reviewRatingFields" :key="field.key" class="field">
+                  <span>{{ field.label }}</span>
+                  <input
+                    v-model.trim="reviewForm[field.key]"
+                    type="number"
+                    min="0"
+                    max="5"
+                    step="0.5"
+                    :required="field.required"
+                  />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>文本评价</span>
+                <textarea v-model.trim="reviewForm.content" rows="5" maxlength="2000"></textarea>
+              </label>
+
+              <div class="form-actions">
+                <button type="button" class="secondary" :disabled="reviewSaving" @click="startCreateReview">
+                  {{ reviewMode === 'edit' ? '取消编辑' : '清空' }}
+                </button>
+                <button type="submit" :disabled="reviewSaving">{{ reviewSubmitText }}</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="review-list-panel">
+            <div class="review-list-header">
+              <h3>评价列表</h3>
+              <button type="button" class="secondary compact-button" :disabled="reviewLoading" @click="fetchReviews">
+                刷新
+              </button>
+            </div>
+
+            <p v-if="reviewError" class="alert error">{{ reviewError }}</p>
+            <p v-if="reviewNotice" class="alert success">{{ reviewNotice }}</p>
+
+            <div v-if="reviewLoading" class="state-box review-state">正在加载评价...</div>
+            <div v-else-if="!hasReviews" class="state-box empty review-state">暂无评价。</div>
+            <div v-else class="review-list">
+              <article v-for="review in reviews" :key="review.id" class="review-card">
+                <header class="review-card-header">
+                  <div>
+                    <strong>综合 {{ display(review.overallRating) }}</strong>
+                    <span>{{ display(review.createdAt) }}</span>
+                  </div>
+                  <div class="row-actions">
+                    <button
+                      type="button"
+                      class="secondary compact-button"
+                      :disabled="reviewSaving || reviewDeletingId !== null"
+                      @click="startEditReview(review)"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      class="danger compact-button"
+                      :disabled="reviewDeletingId === review.id"
+                      @click="confirmDeleteReview(review)"
+                    >
+                      {{ reviewDeletingId === review.id ? '删除中' : '删除' }}
+                    </button>
+                  </div>
+                </header>
+
+                <dl class="review-rating-list">
+                  <div v-for="field in reviewDimensionFields" :key="field.key">
+                    <dt>{{ field.label.replace('评分', '') }}</dt>
+                    <dd>{{ display(review[field.key]) }}</dd>
+                  </div>
+                </dl>
+
+                <p class="review-content">{{ display(review.content) }}</p>
+              </article>
+            </div>
+
+            <div v-if="reviewPageState.total > 0" class="pagination review-pagination">
+              <button
+                type="button"
+                class="secondary"
+                :disabled="!canReviewGoPrevious"
+                @click="changeReviewPage(reviewQuery.page - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ reviewQuery.page }} / {{ effectiveReviewTotalPages }} 页</span>
+              <button
+                type="button"
+                class="secondary"
+                :disabled="!canReviewGoNext"
+                @click="changeReviewPage(reviewQuery.page + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <div
+      v-if="previewCover"
+      class="image-viewer-backdrop"
+      role="presentation"
+      @click.self="closeCoverPreview"
+    >
+      <section class="image-viewer-panel" role="dialog" aria-modal="true" aria-labelledby="cover-viewer-title">
+        <header class="image-viewer-header">
+          <div>
+            <h2 id="cover-viewer-title">{{ previewCover.name }}</h2>
+            <p>{{ previewCover.url }}</p>
+          </div>
+          <button type="button" class="icon-button" aria-label="关闭大图" @click="closeCoverPreview">×</button>
+        </header>
+
+        <img class="image-viewer-img" :src="previewCover.url" :alt="`${previewCover.name} 封面大图`" />
       </section>
     </div>
   </main>
