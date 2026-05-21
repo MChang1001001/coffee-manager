@@ -235,6 +235,7 @@ const submitText = computed(() => {
   return formMode.value === 'edit' ? '保存修改' : '新增咖啡豆'
 })
 const hasRows = computed(() => beans.value.length > 0)
+const featuredBean = computed(() => beans.value[0] ?? null)
 const visibleBeanCount = computed(() => beans.value.length)
 const openedBeanCount = computed(
   () => beans.value.filter((bean) => normalizeStatus(bean.status) === 'OPENED').length,
@@ -1273,19 +1274,98 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
 <template>
   <main class="coffee-page">
-    <section class="page-hero">
+    <section class="notebook-hero" aria-labelledby="coffee-page-title">
       <div class="hero-copy">
-        <p class="eyebrow">Personal Coffee Archive</p>
-        <h1>我的咖啡豆档案库</h1>
-        <p class="subtitle">按封面、产地、处理法和饮用记录整理每一支豆子。</p>
+        <p class="eyebrow">Coffee Manager</p>
+        <h1 id="coffee-page-title">咖啡豆档案</h1>
+        <p class="hero-tagline">每天一杯冰美式，life 才能 moving on.</p>
+        <p class="subtitle">记录每一款咖啡豆的来源、风味与状态，让每一次冲煮更有方向。</p>
       </div>
-      <div class="hero-actions">
-        <button type="button" class="primary-action" @click="startCreate">新增咖啡豆</button>
-        <div class="user-status">
-          <span>当前用户</span>
-          <strong>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</strong>
+
+      <section class="featured-card" aria-label="今日档案">
+        <div class="paperclip" aria-hidden="true"></div>
+        <div class="featured-media">
+          <button
+            v-if="featuredBean && featuredBean.coverImageUrl"
+            type="button"
+            class="cover-thumb-button"
+            :aria-label="`查看 ${featuredBean.name} 封面大图`"
+            @click="openCoverPreview(featuredBean)"
+          >
+            <img class="featured-cover" :src="featuredBean.coverImageUrl" :alt="`${featuredBean.name} 封面`" />
+          </button>
+          <div v-else class="featured-cover cover-placeholder">
+            <span>GOOD BEANS</span>
+          </div>
         </div>
-      </div>
+
+        <div class="featured-body">
+          <p class="mini-label">今日档案</p>
+          <template v-if="featuredBean">
+            <h2>{{ featuredBean.name }}</h2>
+            <p class="featured-subtitle">{{ beanOriginLine(featuredBean) }}</p>
+            <dl class="featured-meta">
+              <div>
+                <dt>烘焙度</dt>
+                <dd>{{ display(featuredBean.roastLevel) }}</dd>
+              </div>
+              <div>
+                <dt>处理法</dt>
+                <dd>{{ display(featuredBean.processMethod) }}</dd>
+              </div>
+              <div>
+                <dt>烘焙商</dt>
+                <dd>{{ display(featuredBean.roaster) }}</dd>
+              </div>
+              <div>
+                <dt>状态</dt>
+                <dd>{{ statusLabel(featuredBean.status) }}</dd>
+              </div>
+            </dl>
+            <p class="featured-note">
+              评分 {{ display(featuredBean.overallRating) }} · 评价 {{ display(featuredBean.reviewCount) }} · 冲煮
+              {{ display(featuredBean.brewCount) }}
+            </p>
+            <div class="featured-actions">
+              <button
+                type="button"
+                class="secondary compact-button"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="openReviewDialog(featuredBean)"
+              >
+                评价
+              </button>
+              <button
+                type="button"
+                class="secondary compact-button"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="openBrewDialog(featuredBean)"
+              >
+                冲煮
+              </button>
+              <button
+                type="button"
+                class="secondary compact-button"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="startEdit(featuredBean)"
+              >
+                {{ editingLoadingId === featuredBean.id ? '加载中' : '编辑' }}
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <h2>还没有今日档案</h2>
+            <p class="featured-subtitle">新增第一支豆子后，这里会展示当前列表里的第一条档案。</p>
+          </template>
+        </div>
+      </section>
+
+      <aside class="hero-side-note" aria-label="档案快捷操作">
+        <p>Today's note</p>
+        <strong>{{ archiveRangeText }}</strong>
+        <span>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</span>
+        <button type="button" class="primary-action" @click="startCreate">＋ 新增咖啡豆</button>
+      </aside>
 
       <div class="archive-stats" aria-label="咖啡豆档案概览">
         <div class="archive-stat">
@@ -1307,10 +1387,18 @@ function joinParts(...parts: Array<string | null | undefined>) {
       </div>
     </section>
 
-    <section class="filter-bar" aria-label="咖啡豆筛选">
+    <section class="filter-bar stationery-toolbar" aria-label="咖啡豆筛选">
+      <div v-if="error" class="alert error inline-alert">
+        <span>{{ error }}</span>
+        <button type="button" class="secondary compact-button" :disabled="loading" @click="fetchBeans">
+          重试
+        </button>
+      </div>
+      <p v-if="notice" class="alert success">{{ notice }}</p>
+
       <div class="filter-heading">
         <div>
-          <p class="eyebrow">Search & Filter</p>
+          <p class="eyebrow">Stationery toolbar</p>
           <h2>检索档案</h2>
         </div>
         <span v-if="hasActiveFilters" class="filter-count">{{ activeFilterCount }} 个筛选</span>
@@ -1318,7 +1406,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
       <form class="filter-form" @submit.prevent="applyFilters">
         <label class="field">
-          <span>关键词</span>
+          <span>关键词搜索</span>
           <input v-model="filters.keyword" type="search" placeholder="名称 / 烘焙商 / 产地" />
         </label>
 
@@ -1349,11 +1437,11 @@ function joinParts(...parts: Array<string | null | undefined>) {
       </form>
     </section>
 
-    <section class="list-panel">
+    <section class="list-panel archive-sheet-panel">
       <div class="section-heading archive-board-header">
         <div>
-          <p class="eyebrow">Archive Shelf</p>
-          <h2>咖啡豆档案</h2>
+          <p class="eyebrow">Archive sheet</p>
+          <h2>豆子记录页</h2>
           <p>{{ archiveRangeText }}</p>
         </div>
 
@@ -1367,28 +1455,18 @@ function joinParts(...parts: Array<string | null | undefined>) {
         </label>
       </div>
 
-      <div v-if="error" class="alert error inline-alert">
-        <span>{{ error }}</span>
-        <button type="button" class="secondary compact-button" :disabled="loading" @click="fetchBeans">
-          重试
-        </button>
-      </div>
-      <p v-if="notice" class="alert success">{{ notice }}</p>
-
-      <div v-if="loading" class="skeleton-grid" aria-live="polite" aria-label="正在加载咖啡豆列表">
-        <article v-for="index in 6" :key="index" class="bean-card skeleton-card">
-          <div class="skeleton-cover"></div>
-          <div class="skeleton-lines">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-        </article>
+      <div v-if="loading" class="archive-loading" aria-live="polite" aria-label="正在加载咖啡豆列表">
+        <div v-for="index in 5" :key="index" class="archive-loading-row">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
       </div>
       <div v-else-if="!hasRows" class="state-box empty archive-empty">
         <div>
           <h3>{{ hasActiveFilters ? '没有匹配的咖啡豆' : '档案库暂时为空' }}</h3>
-          <p>{{ hasActiveFilters ? '换一组关键词或清空筛选后再看看。' : '先新增一支咖啡豆，给档案库放入第一张封面。' }}</p>
+          <p>{{ hasActiveFilters ? '换一组关键词或清空筛选后再看看。' : '先新增一支咖啡豆，给档案库贴上第一张豆卡。' }}</p>
           <div class="empty-actions">
             <button v-if="hasActiveFilters" type="button" class="secondary" :disabled="loading" @click="resetFilters">
               清空筛选
@@ -1397,91 +1475,101 @@ function joinParts(...parts: Array<string | null | undefined>) {
           </div>
         </div>
       </div>
-      <div v-else class="bean-grid">
-        <article v-for="bean in beans" :key="bean.id" class="bean-card">
-          <div class="bean-cover-shell">
-            <button
-              v-if="bean.coverImageUrl"
-              type="button"
-              class="cover-thumb-button"
-              :aria-label="`查看 ${bean.name} 封面大图`"
-              @click="openCoverPreview(bean)"
-            >
-              <img class="bean-cover" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
-            </button>
-            <div v-else class="bean-cover cover-placeholder">
-              <span>No Cover</span>
+      <div v-else class="archive-table">
+        <div class="archive-row archive-row-head" aria-hidden="true">
+          <span>豆子</span>
+          <span>烘焙商</span>
+          <span>烘焙度</span>
+          <span>处理法</span>
+          <span>产地</span>
+          <span>记录</span>
+          <span>操作</span>
+        </div>
+
+        <article v-for="bean in beans" :key="bean.id" class="archive-row">
+          <div class="archive-bean-cell">
+            <div class="archive-cover-shell">
+              <button
+                v-if="bean.coverImageUrl"
+                type="button"
+                class="cover-thumb-button"
+                :aria-label="`查看 ${bean.name} 封面大图`"
+                @click="openCoverPreview(bean)"
+              >
+                <img class="archive-cover" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
+              </button>
+              <div v-else class="archive-cover cover-placeholder">
+                <span>No cover</span>
+              </div>
             </div>
-            <span class="status-badge" :class="statusClass(bean.status)">{{ statusLabel(bean.status) }}</span>
+            <div>
+              <h3>{{ bean.name }}</h3>
+              <p>{{ beanOriginLine(bean) }}</p>
+              <span class="status-badge inline" :class="statusClass(bean.status)">{{ statusLabel(bean.status) }}</span>
+            </div>
           </div>
 
-          <div class="bean-card-body">
-            <header class="bean-card-title">
-              <div>
-                <h3>{{ bean.name }}</h3>
-                <p>{{ beanRoastLine(bean) }}</p>
-              </div>
-            </header>
+          <div class="archive-cell">
+            <span class="cell-label">烘焙商</span>
+            <strong>{{ display(bean.roaster) }}</strong>
+          </div>
 
-            <dl class="bean-meta-list">
-              <div>
-                <dt>产地</dt>
-                <dd>{{ beanOriginLine(bean) }}</dd>
-              </div>
-              <div>
-                <dt>处理法</dt>
-                <dd>{{ display(bean.processMethod) }}</dd>
-              </div>
-              <div>
-                <dt>烘焙度</dt>
-                <dd>{{ display(bean.roastLevel) }}</dd>
-              </div>
-              <div>
-                <dt>购买日期</dt>
-                <dd>{{ display(bean.purchaseDate) }}</dd>
-              </div>
-            </dl>
+          <div class="archive-cell">
+            <span class="cell-label">烘焙度</span>
+            <strong>{{ display(bean.roastLevel) }}</strong>
+            <small>{{ display(bean.roastDate) }}</small>
+          </div>
 
-            <div class="bean-metrics" aria-label="咖啡豆记录统计">
-              <span>评分 {{ display(bean.overallRating) }}</span>
-              <span>评价 {{ display(bean.reviewCount) }}</span>
-              <span>冲煮 {{ display(bean.brewCount) }}</span>
-            </div>
+          <div class="archive-cell">
+            <span class="cell-label">处理法</span>
+            <strong>{{ display(bean.processMethod) }}</strong>
+          </div>
 
-            <div class="bean-card-actions">
-              <button
-                type="button"
-                class="secondary"
-                :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                @click="openReviewDialog(bean)"
-              >
-                评价
-              </button>
-              <button
-                type="button"
-                class="secondary"
-                :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                @click="openBrewDialog(bean)"
-              >
-                冲煮
-              </button>
-              <button
-                type="button"
-                class="secondary"
-                :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                @click="startEdit(bean)"
-              >
-                {{ editingLoadingId === bean.id ? '加载中' : '编辑' }}
-              </button>
-              <button
-                type="button"
-                class="danger"
-                :disabled="deletingId !== null"
-                @click="confirmDelete(bean)"
-              >
-                {{ deletingId === bean.id ? '删除中' : '删除' }}
-              </button>
-            </div>
+          <div class="archive-cell">
+            <span class="cell-label">产地</span>
+            <strong>{{ display(bean.origin) }}</strong>
+            <small>{{ display(bean.region) }}</small>
+          </div>
+
+          <div class="archive-records">
+            <span>评分 {{ display(bean.overallRating) }}</span>
+            <span>评价 {{ display(bean.reviewCount) }}</span>
+            <span>冲煮 {{ display(bean.brewCount) }}</span>
+          </div>
+
+          <div class="archive-action-group">
+            <button
+              type="button"
+              class="secondary compact-button"
+              :disabled="saving || deletingId !== null || editingLoadingId !== null"
+              @click="openReviewDialog(bean)"
+            >
+              评价
+            </button>
+            <button
+              type="button"
+              class="secondary compact-button"
+              :disabled="saving || deletingId !== null || editingLoadingId !== null"
+              @click="openBrewDialog(bean)"
+            >
+              冲煮
+            </button>
+            <button
+              type="button"
+              class="secondary compact-button"
+              :disabled="saving || deletingId !== null || editingLoadingId !== null"
+              @click="startEdit(bean)"
+            >
+              {{ editingLoadingId === bean.id ? '加载中' : '编辑' }}
+            </button>
+            <button
+              type="button"
+              class="danger compact-button"
+              :disabled="deletingId !== null"
+              @click="confirmDelete(bean)"
+            >
+              {{ deletingId === bean.id ? '删除中' : '删除' }}
+            </button>
           </div>
         </article>
       </div>
