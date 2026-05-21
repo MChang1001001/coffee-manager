@@ -61,6 +61,8 @@ coffee-manager/
     src/api/                       前端 API 封装
     src/views/CoffeeView.vue       当前 MVP 主页面
     vite.config.ts                 Vite 代理配置
+  scripts/
+    local-smoke.mjs                本地 MVP 主链路烟测脚本
   docs/                            需求、数据库、接口文档与项目状态索引
   uploads/                         运行时上传目录，已 gitignore
 ```
@@ -322,6 +324,85 @@ cd frontend
 npm run preview
 ```
 
+## 本地烟测
+
+本地烟测脚本位于：
+
+```text
+scripts/local-smoke.mjs
+```
+
+脚本用途：
+
+- 快速确认本地 MVP 主链路可用。
+- 适用于本地开发前、README 启动步骤调整后、或继续开发前的轻量回归检查。
+- 不是生产验证脚本，不是 CI/CD 方案，也不是完整自动化测试体系。
+
+运行前提：
+
+- MySQL 已启动，且已初始化 `coffee_manager`。
+- 后端已启动，默认地址为 `http://localhost:8080`。
+- `FILE_UPLOAD_PATH` 已配置或使用默认上传目录，且后端进程可写。
+- 前端可选启动，默认地址为 `http://localhost:5173`；如果前端未启动，脚本可以跳过前端 / Vite proxy 检查。
+- 默认登录账号仍为 `admin/admin123456`。
+
+运行命令：
+
+```powershell
+node scripts\local-smoke.mjs
+```
+
+可选参数：
+
+```powershell
+node scripts\local-smoke.mjs --backend-url http://localhost:8080 --frontend-url http://localhost:5173
+node scripts\local-smoke.mjs --username admin --password admin123456
+node scripts\local-smoke.mjs --skip-frontend
+```
+
+也可以使用环境变量覆盖：
+
+```powershell
+$env:SMOKE_BACKEND_URL='http://localhost:8080'
+$env:SMOKE_FRONTEND_URL='http://localhost:5173'
+$env:SMOKE_USERNAME='admin'
+$env:SMOKE_PASSWORD='admin123456'
+$env:SMOKE_SKIP_FRONTEND='false'
+node scripts\local-smoke.mjs
+```
+
+检查范围：
+
+- 后端健康检查：`GET /api/health`。
+- 登录 / token 获取：`POST /api/auth/login`。
+- coffee 主链路：列表、新增、详情、编辑、删除。
+- file 主链路：上传封面，校验 `/uploads/coffee-covers/{filename}` 静态访问。
+- review 主链路：列表、新增、详情、编辑、删除。
+- brew 主链路：列表、新增、详情、编辑、删除。
+- 前端可选检查：访问 `/coffee`，并通过 Vite proxy 检查 `/api` 和 `/uploads`。
+
+预期输出：
+
+```text
+SMOKE_TEST_RESULT: PASS
+```
+
+脚本结束时会输出：
+
+- 是否通过。
+- 创建的 coffee / review / brew 测试数据 ID。
+- 上传封面 URL。
+- 是否执行了删除调用。
+- 是否可能留下逻辑删除记录。
+- 是否可能留下本地上传文件。
+
+已知副作用：
+
+- 烟测数据会带 `[SMOKE_TEST]` 前缀。
+- 删除接口当前是逻辑删除，烟测会留下 `deleted=1` 的数据库记录。
+- 文件上传会落盘，烟测会在本地 uploads 目录留下测试上传文件。
+- 脚本只用于本地开发 / MVP 回归检查，不扩展为完整自动化测试体系。
+
 ## 默认登录账号
 
 MVP 当前仍采用临时默认账号：
@@ -484,6 +565,7 @@ mkdir -p ~/dev/coffee-manager/uploads
 - file 封面上传通过本地烟测，返回 URL 符合 `/uploads/coffee-covers/{filename}`，并可通过该路径访问图片。
 - review 列表 / 新增 / 详情 / 编辑 / 删除通过本地烟测，评分步进 0.5 保持有效。
 - brew 列表 / 新增 / 详情 / 编辑 / 删除通过本地烟测。
+- 本地一键烟测脚本 `node scripts\local-smoke.mjs` 已运行通过，输出 `SMOKE_TEST_RESULT: PASS`。
 
 本 README 对应的是当前 MVP 本地部署 / 本地可复现启动状态，不代表延后事项已经完成。
 
