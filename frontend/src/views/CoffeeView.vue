@@ -235,6 +235,27 @@ const submitText = computed(() => {
   return formMode.value === 'edit' ? '保存修改' : '新增咖啡豆'
 })
 const hasRows = computed(() => beans.value.length > 0)
+const visibleBeanCount = computed(() => beans.value.length)
+const openedBeanCount = computed(
+  () => beans.value.filter((bean) => normalizeStatus(bean.status) === 'OPENED').length,
+)
+const coverBeanCount = computed(() => beans.value.filter((bean) => bean.coverImageUrl).length)
+const activeFilterCount = computed(
+  () =>
+    [filters.keyword, filters.roastLevel, filters.processMethod, filters.origin].filter(
+      (value) => value.trim() !== '',
+    ).length,
+)
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
+const archiveRangeText = computed(() => {
+  if (pageState.total <= 0 || visibleBeanCount.value <= 0) {
+    return '当前没有可展示的档案'
+  }
+
+  const start = (filters.page - 1) * filters.pageSize + 1
+  const end = start + visibleBeanCount.value - 1
+  return `展示 ${start}-${end} / ${pageState.total}`
+})
 const hasReviews = computed(() => reviews.value.length > 0)
 const hasBrewRecords = computed(() => brewRecords.value.length > 0)
 const effectiveTotalPages = computed(() => {
@@ -1200,26 +1221,101 @@ function assertRatingRange(value: number, label: string) {
 function display(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '-' : value
 }
+
+function normalizeStatus(value: string | null | undefined) {
+  return value?.trim().toUpperCase() ?? ''
+}
+
+function statusLabel(value: string | null | undefined) {
+  const normalized = normalizeStatus(value)
+
+  if (normalized === 'UNOPENED') {
+    return '未开封'
+  }
+
+  if (normalized === 'OPENED') {
+    return '已开封'
+  }
+
+  if (normalized === 'FINISHED') {
+    return '已喝完'
+  }
+
+  return display(value)
+}
+
+function statusClass(value: string | null | undefined) {
+  const normalized = normalizeStatus(value)
+
+  if (normalized === 'OPENED') {
+    return 'opened'
+  }
+
+  if (normalized === 'FINISHED') {
+    return 'finished'
+  }
+
+  return 'unopened'
+}
+
+function beanOriginLine(bean: CoffeeBeanListItem) {
+  return joinParts(bean.origin, bean.region) || '未记录产地'
+}
+
+function beanRoastLine(bean: CoffeeBeanListItem) {
+  return joinParts(bean.roaster, bean.roastDate) || '未记录烘焙信息'
+}
+
+function joinParts(...parts: Array<string | null | undefined>) {
+  return parts.map((part) => part?.trim()).filter(Boolean).join(' / ')
+}
 </script>
 
 <template>
   <main class="coffee-page">
     <section class="page-hero">
-      <div>
-        <p class="eyebrow">Coffee Beans</p>
-        <h1>咖啡豆档案</h1>
-        <p class="subtitle">基础信息、包装链接和入库状态。</p>
+      <div class="hero-copy">
+        <p class="eyebrow">Personal Coffee Archive</p>
+        <h1>我的咖啡豆档案库</h1>
+        <p class="subtitle">按封面、产地、处理法和饮用记录整理每一支豆子。</p>
       </div>
       <div class="hero-actions">
-        <button type="button" @click="startCreate">新增咖啡豆</button>
+        <button type="button" class="primary-action" @click="startCreate">新增咖啡豆</button>
         <div class="user-status">
           <span>当前用户</span>
           <strong>{{ currentUser?.nickname || currentUser?.username || '连接中' }}</strong>
         </div>
       </div>
+
+      <div class="archive-stats" aria-label="咖啡豆档案概览">
+        <div class="archive-stat">
+          <span>总档案</span>
+          <strong>{{ pageState.total }}</strong>
+        </div>
+        <div class="archive-stat">
+          <span>当前页</span>
+          <strong>{{ visibleBeanCount }}</strong>
+        </div>
+        <div class="archive-stat">
+          <span>已开封</span>
+          <strong>{{ openedBeanCount }}</strong>
+        </div>
+        <div class="archive-stat">
+          <span>有封面</span>
+          <strong>{{ coverBeanCount }}</strong>
+        </div>
+      </div>
     </section>
 
     <section class="filter-bar" aria-label="咖啡豆筛选">
+      <div class="filter-heading">
+        <div>
+          <p class="eyebrow">Search & Filter</p>
+          <h2>检索档案</h2>
+        </div>
+        <span v-if="hasActiveFilters" class="filter-count">{{ activeFilterCount }} 个筛选</span>
+      </div>
+
       <form class="filter-form" @submit.prevent="applyFilters">
         <label class="field">
           <span>关键词</span>
@@ -1254,10 +1350,11 @@ function display(value: string | number | null | undefined) {
     </section>
 
     <section class="list-panel">
-      <div class="section-heading">
+      <div class="section-heading archive-board-header">
         <div>
-          <h2>咖啡豆列表</h2>
-          <p>{{ pageState.total }} 条记录</p>
+          <p class="eyebrow">Archive Shelf</p>
+          <h2>咖啡豆档案</h2>
+          <p>{{ archiveRangeText }}</p>
         </div>
 
         <label class="page-size">
@@ -1270,90 +1367,123 @@ function display(value: string | number | null | undefined) {
         </label>
       </div>
 
-      <p v-if="error" class="alert error">{{ error }}</p>
+      <div v-if="error" class="alert error inline-alert">
+        <span>{{ error }}</span>
+        <button type="button" class="secondary compact-button" :disabled="loading" @click="fetchBeans">
+          重试
+        </button>
+      </div>
       <p v-if="notice" class="alert success">{{ notice }}</p>
 
-      <div v-if="loading" class="state-box">正在加载咖啡豆列表...</div>
-      <div v-else-if="!hasRows" class="state-box empty">暂无咖啡豆数据。</div>
-      <div v-else class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>产地</th>
-              <th>处理法</th>
-              <th>烘焙度</th>
-              <th>烘焙日期</th>
-              <th>状态</th>
-              <th>封面</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="bean in beans" :key="bean.id">
-              <td>
-                <strong>{{ bean.name }}</strong>
-                <span>{{ display(bean.roaster) }}</span>
-              </td>
-              <td>
-                {{ display(bean.origin) }}
-                <span>{{ display(bean.region) }}</span>
-              </td>
-              <td>{{ display(bean.processMethod) }}</td>
-              <td>{{ display(bean.roastLevel) }}</td>
-              <td>{{ display(bean.roastDate) }}</td>
-              <td>{{ display(bean.status) }}</td>
-              <td>
-                <button
-                  v-if="bean.coverImageUrl"
-                  type="button"
-                  class="cover-thumb-button"
-                  :aria-label="`查看 ${bean.name} 封面大图`"
-                  @click="openCoverPreview(bean)"
-                >
-                  <img class="cover-thumb" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
-                </button>
-                <span v-else>-</span>
-              </td>
-              <td>
-                <div class="row-actions">
-                  <button
-                    type="button"
-                    class="secondary"
-                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                    @click="openReviewDialog(bean)"
-                  >
-                    评价
-                  </button>
-                  <button
-                    type="button"
-                    class="secondary"
-                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                    @click="openBrewDialog(bean)"
-                  >
-                    冲煮
-                  </button>
-                  <button
-                    type="button"
-                    class="secondary"
-                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
-                    @click="startEdit(bean)"
-                  >
-                    {{ editingLoadingId === bean.id ? '加载中' : '编辑' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="danger"
-                    :disabled="deletingId !== null"
-                    @click="confirmDelete(bean)"
-                  >
-                    {{ deletingId === bean.id ? '删除中' : '删除' }}
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-if="loading" class="skeleton-grid" aria-live="polite" aria-label="正在加载咖啡豆列表">
+        <article v-for="index in 6" :key="index" class="bean-card skeleton-card">
+          <div class="skeleton-cover"></div>
+          <div class="skeleton-lines">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </article>
+      </div>
+      <div v-else-if="!hasRows" class="state-box empty archive-empty">
+        <div>
+          <h3>{{ hasActiveFilters ? '没有匹配的咖啡豆' : '档案库暂时为空' }}</h3>
+          <p>{{ hasActiveFilters ? '换一组关键词或清空筛选后再看看。' : '先新增一支咖啡豆，给档案库放入第一张封面。' }}</p>
+          <div class="empty-actions">
+            <button v-if="hasActiveFilters" type="button" class="secondary" :disabled="loading" @click="resetFilters">
+              清空筛选
+            </button>
+            <button type="button" @click="startCreate">新增咖啡豆</button>
+          </div>
+        </div>
+      </div>
+      <div v-else class="bean-grid">
+        <article v-for="bean in beans" :key="bean.id" class="bean-card">
+          <div class="bean-cover-shell">
+            <button
+              v-if="bean.coverImageUrl"
+              type="button"
+              class="cover-thumb-button"
+              :aria-label="`查看 ${bean.name} 封面大图`"
+              @click="openCoverPreview(bean)"
+            >
+              <img class="bean-cover" :src="bean.coverImageUrl" :alt="`${bean.name} 封面`" />
+            </button>
+            <div v-else class="bean-cover cover-placeholder">
+              <span>No Cover</span>
+            </div>
+            <span class="status-badge" :class="statusClass(bean.status)">{{ statusLabel(bean.status) }}</span>
+          </div>
+
+          <div class="bean-card-body">
+            <header class="bean-card-title">
+              <div>
+                <h3>{{ bean.name }}</h3>
+                <p>{{ beanRoastLine(bean) }}</p>
+              </div>
+            </header>
+
+            <dl class="bean-meta-list">
+              <div>
+                <dt>产地</dt>
+                <dd>{{ beanOriginLine(bean) }}</dd>
+              </div>
+              <div>
+                <dt>处理法</dt>
+                <dd>{{ display(bean.processMethod) }}</dd>
+              </div>
+              <div>
+                <dt>烘焙度</dt>
+                <dd>{{ display(bean.roastLevel) }}</dd>
+              </div>
+              <div>
+                <dt>购买日期</dt>
+                <dd>{{ display(bean.purchaseDate) }}</dd>
+              </div>
+            </dl>
+
+            <div class="bean-metrics" aria-label="咖啡豆记录统计">
+              <span>评分 {{ display(bean.overallRating) }}</span>
+              <span>评价 {{ display(bean.reviewCount) }}</span>
+              <span>冲煮 {{ display(bean.brewCount) }}</span>
+            </div>
+
+            <div class="bean-card-actions">
+              <button
+                type="button"
+                class="secondary"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="openReviewDialog(bean)"
+              >
+                评价
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="openBrewDialog(bean)"
+              >
+                冲煮
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                @click="startEdit(bean)"
+              >
+                {{ editingLoadingId === bean.id ? '加载中' : '编辑' }}
+              </button>
+              <button
+                type="button"
+                class="danger"
+                :disabled="deletingId !== null"
+                @click="confirmDelete(bean)"
+              >
+                {{ deletingId === bean.id ? '删除中' : '删除' }}
+              </button>
+            </div>
+          </div>
+        </article>
       </div>
 
       <div v-if="pageState.total > 0" class="pagination">
