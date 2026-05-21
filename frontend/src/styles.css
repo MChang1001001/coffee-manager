@@ -613,6 +613,10 @@ td span {
   width: min(920px, 100%);
 }
 
+.brew-dialog-panel {
+  width: min(980px, 100%);
+}
+
 .review-list-panel {
   display: grid;
   gap: 12px;
@@ -622,8 +626,18 @@ td span {
   width: min(640px, 100%);
 }
 
+.brew-form-dialog-panel {
+  width: min(760px, 100%);
+}
+
 .review-form {
   display: grid;
+  gap: 14px;
+}
+
+.brew-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -682,22 +696,59 @@ td span {
   margin: 0;
 }
 
-.review-rating-list div {
+.review-rating-list div,
+.brew-detail-list div {
   border-radius: 6px;
   background: #f5f7f8;
   padding: 8px 10px;
 }
 
-.review-rating-list dt {
+.review-rating-list dt,
+.brew-detail-list dt {
   color: #66766f;
   font-size: 12px;
   font-weight: 700;
 }
 
-.review-rating-list dd {
+.review-rating-list dd,
+.brew-detail-list dd {
   margin: 2px 0 0;
   color: #17211f;
   font-weight: 800;
+}
+
+.brew-detail-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-field input {
+  width: auto;
+  min-height: auto;
+}
+
+.checkbox-field span {
+  color: #40524d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.recommend-badge {
+  width: fit-content;
+  border-radius: 999px;
+  background: #e3f0eb;
+  color: #1f604f;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
 }
 
 .review-content {
@@ -770,8 +821,10 @@ td span {
     grid-template-columns: 1fr;
   }
 
+  .brew-form,
   .review-rating-fields,
-  .review-rating-list {
+  .review-rating-list,
+  .brew-detail-list {
     grid-template-columns: 1fr;
   }
 

@@ -3,6 +3,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ensureDevAuth } from '../api/auth'
 import type { UserProfile } from '../api/auth'
 import {
+  createBrewRecord,
+  deleteBrewRecord,
+  listBrewRecords,
+  updateBrewRecord,
+} from '../api/brew'
+import {
   createCoffeeBean,
   deleteCoffeeBean,
   getCoffeeBean,
@@ -23,6 +29,7 @@ import type {
   CoffeeBeanQuery,
   PageResponse,
 } from '../api/coffee'
+import type { BrewRecord, BrewRecordPayload } from '../api/brew'
 import type { CoffeeReview, CoffeeReviewPayload } from '../api/review'
 import { getRequestErrorMessage } from '../api/request'
 
@@ -58,6 +65,19 @@ interface ReviewForm {
   content: string
 }
 
+interface BrewForm {
+  brewMethod: string
+  beanAmountGrams: string | number
+  waterAmountMl: string | number
+  ratio: string
+  waterTemperature: string | number
+  grindSize: string
+  brewTimeSeconds: string | number
+  resultSummary: string
+  resultNotes: string
+  isRecommended: boolean
+}
+
 type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
 
 const defaultForm: CoffeeBeanForm = {
@@ -90,6 +110,19 @@ const defaultReviewForm: ReviewForm = {
   bodyRating: '',
   aftertasteRating: '',
   content: '',
+}
+
+const defaultBrewForm: BrewForm = {
+  brewMethod: '',
+  beanAmountGrams: '',
+  waterAmountMl: '',
+  ratio: '',
+  waterTemperature: '',
+  grindSize: '',
+  brewTimeSeconds: '',
+  resultSummary: '',
+  resultNotes: '',
+  isRecommended: false,
 }
 
 const reviewRatingFields: Array<{ key: RatingFieldKey; label: string; required?: boolean }> = [
@@ -132,6 +165,18 @@ const reviewMode = ref<'create' | 'edit'>('create')
 const editingReviewId = ref<number | null>(null)
 const isReviewDialogOpen = ref(false)
 const isReviewFormDialogOpen = ref(false)
+const selectedBrewBean = ref<CoffeeBeanListItem | null>(null)
+const brewRecords = ref<BrewRecord[]>([])
+const brewLoading = ref(false)
+const brewSaving = ref(false)
+const brewDeletingId = ref<number | null>(null)
+const brewError = ref('')
+const brewFormError = ref('')
+const brewNotice = ref('')
+const brewMode = ref<'create' | 'edit'>('create')
+const editingBrewId = ref<number | null>(null)
+const isBrewDialogOpen = ref(false)
+const isBrewFormDialogOpen = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -157,6 +202,15 @@ const reviewPageState = reactive({
   totalPages: 0,
 })
 const reviewForm = reactive<ReviewForm>({ ...defaultReviewForm })
+const brewQuery = reactive({
+  page: 1,
+  pageSize: 20,
+})
+const brewPageState = reactive({
+  total: 0,
+  totalPages: 0,
+})
+const brewForm = reactive<BrewForm>({ ...defaultBrewForm })
 
 const formTitle = computed(() => (formMode.value === 'edit' ? '编辑咖啡豆' : '新增咖啡豆'))
 const formDescription = computed(() => {
@@ -179,6 +233,7 @@ const submitText = computed(() => {
 })
 const hasRows = computed(() => beans.value.length > 0)
 const hasReviews = computed(() => reviews.value.length > 0)
+const hasBrewRecords = computed(() => brewRecords.value.length > 0)
 const effectiveTotalPages = computed(() => {
   if (pageState.total <= 0) {
     return 0
@@ -213,6 +268,32 @@ const effectiveReviewTotalPages = computed(() => {
 const canReviewGoPrevious = computed(() => reviewQuery.page > 1 && !reviewLoading.value)
 const canReviewGoNext = computed(
   () => reviewQuery.page < effectiveReviewTotalPages.value && !reviewLoading.value,
+)
+const brewDialogTitle = computed(() => {
+  if (!selectedBrewBean.value) {
+    return '冲煮记录'
+  }
+
+  return `冲煮记录：${selectedBrewBean.value.name}`
+})
+const brewFormTitle = computed(() => (brewMode.value === 'edit' ? '编辑冲煮记录' : '新增冲煮记录'))
+const brewSubmitText = computed(() => {
+  if (brewSaving.value) {
+    return '保存中'
+  }
+
+  return brewMode.value === 'edit' ? '保存修改' : '新增冲煮记录'
+})
+const effectiveBrewTotalPages = computed(() => {
+  if (brewPageState.total <= 0) {
+    return 0
+  }
+
+  return Math.max(1, brewPageState.totalPages)
+})
+const canBrewGoPrevious = computed(() => brewQuery.page > 1 && !brewLoading.value)
+const canBrewGoNext = computed(
+  () => brewQuery.page < effectiveBrewTotalPages.value && !brewLoading.value,
 )
 
 onMounted(() => {
@@ -472,6 +553,173 @@ function closeReviewFormDialog() {
   resetReviewForm()
 }
 
+async function openBrewDialog(bean: CoffeeBeanListItem) {
+  error.value = ''
+  notice.value = ''
+  selectedBrewBean.value = bean
+  brewQuery.page = 1
+  resetBrewState()
+  isBrewDialogOpen.value = true
+  await fetchBrewRecords()
+}
+
+async function fetchBrewRecords() {
+  if (!selectedBrewBean.value) {
+    return
+  }
+
+  brewLoading.value = true
+  brewError.value = ''
+
+  try {
+    const page = await listBrewRecords(selectedBrewBean.value.id, {
+      page: brewQuery.page,
+      pageSize: brewQuery.pageSize,
+    })
+
+    if (brewQuery.page > 1 && page.items.length === 0 && page.total > 0) {
+      brewQuery.page = Math.max(1, page.totalPages)
+      applyBrewPage(
+        await listBrewRecords(selectedBrewBean.value.id, {
+          page: brewQuery.page,
+          pageSize: brewQuery.pageSize,
+        }),
+      )
+      return
+    }
+
+    applyBrewPage(page)
+  } catch (caughtError) {
+    brewError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    brewLoading.value = false
+  }
+}
+
+function applyBrewPage(page: PageResponse<BrewRecord>) {
+  brewRecords.value = page.items ?? []
+  brewQuery.page = page.page
+  brewQuery.pageSize = page.pageSize
+  brewPageState.total = page.total
+  brewPageState.totalPages = page.totalPages
+}
+
+function changeBrewPage(page: number) {
+  if (page < 1 || (effectiveBrewTotalPages.value > 0 && page > effectiveBrewTotalPages.value)) {
+    return
+  }
+
+  brewQuery.page = page
+  void fetchBrewRecords()
+}
+
+function startCreateBrew() {
+  resetBrewForm()
+  brewFormError.value = ''
+  brewNotice.value = ''
+  isBrewFormDialogOpen.value = true
+}
+
+function startEditBrew(record: BrewRecord) {
+  brewMode.value = 'edit'
+  editingBrewId.value = record.id
+  brewFormError.value = ''
+  brewNotice.value = ''
+  fillBrewForm(record)
+  isBrewFormDialogOpen.value = true
+}
+
+async function submitBrewForm() {
+  if (!selectedBrewBean.value) {
+    brewFormError.value = '请先选择咖啡豆。'
+    return
+  }
+
+  brewFormError.value = ''
+  brewNotice.value = ''
+
+  let payload: BrewRecordPayload
+
+  try {
+    payload = toBrewPayload()
+  } catch (caughtError) {
+    brewFormError.value = getRequestErrorMessage(caughtError)
+    return
+  }
+
+  brewSaving.value = true
+
+  try {
+    if (brewMode.value === 'edit' && editingBrewId.value !== null) {
+      await updateBrewRecord(editingBrewId.value, payload)
+      brewNotice.value = '冲煮记录已更新。'
+    } else {
+      await createBrewRecord(selectedBrewBean.value.id, payload)
+      brewNotice.value = '冲煮记录已新增。'
+    }
+
+    isBrewFormDialogOpen.value = false
+    resetBrewForm()
+    await fetchBrewRecords()
+  } catch (caughtError) {
+    brewFormError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    brewSaving.value = false
+  }
+}
+
+async function confirmDeleteBrew(record: BrewRecord) {
+  const confirmed = window.confirm('确认删除这条冲煮记录吗？')
+
+  if (!confirmed) {
+    return
+  }
+
+  brewError.value = ''
+  brewFormError.value = ''
+  brewNotice.value = ''
+  brewDeletingId.value = record.id
+
+  try {
+    await deleteBrewRecord(record.id)
+
+    if (editingBrewId.value === record.id) {
+      resetBrewForm()
+    }
+
+    brewNotice.value = '冲煮记录已删除。'
+    await fetchBrewRecords()
+  } catch (caughtError) {
+    brewError.value = getRequestErrorMessage(caughtError)
+  } finally {
+    brewDeletingId.value = null
+  }
+}
+
+function closeBrewDialog() {
+  if (brewSaving.value || brewDeletingId.value !== null) {
+    return
+  }
+
+  isBrewDialogOpen.value = false
+  isBrewFormDialogOpen.value = false
+  selectedBrewBean.value = null
+  brewRecords.value = []
+  brewPageState.total = 0
+  brewPageState.totalPages = 0
+  resetBrewState()
+}
+
+function closeBrewFormDialog() {
+  if (brewSaving.value) {
+    return
+  }
+
+  isBrewFormDialogOpen.value = false
+  brewFormError.value = ''
+  resetBrewForm()
+}
+
 function startCreate() {
   error.value = ''
   formError.value = ''
@@ -561,6 +809,10 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
 
     if (selectedReviewBean.value?.id === bean.id) {
       closeReviewDialog()
+    }
+
+    if (selectedBrewBean.value?.id === bean.id) {
+      closeBrewDialog()
     }
 
     notice.value = '咖啡豆已删除。'
@@ -703,6 +955,37 @@ function fillReviewForm(review: CoffeeReview) {
   })
 }
 
+function resetBrewState() {
+  brewRecords.value = []
+  brewPageState.total = 0
+  brewPageState.totalPages = 0
+  brewError.value = ''
+  brewFormError.value = ''
+  brewNotice.value = ''
+  resetBrewForm()
+}
+
+function resetBrewForm() {
+  Object.assign(brewForm, defaultBrewForm)
+  editingBrewId.value = null
+  brewMode.value = 'create'
+}
+
+function fillBrewForm(record: BrewRecord) {
+  Object.assign(brewForm, {
+    brewMethod: valueToString(record.brewMethod),
+    beanAmountGrams: valueToString(record.beanAmountGrams),
+    waterAmountMl: valueToString(record.waterAmountMl),
+    ratio: valueToString(record.ratio),
+    waterTemperature: valueToString(record.waterTemperature),
+    grindSize: valueToString(record.grindSize),
+    brewTimeSeconds: valueToString(record.brewTimeSeconds),
+    resultSummary: valueToString(record.resultSummary),
+    resultNotes: valueToString(record.resultNotes),
+    isRecommended: Boolean(record.isRecommended),
+  })
+}
+
 function toPayload(): CoffeeBeanPayload {
   const name = form.name.trim()
 
@@ -745,6 +1028,27 @@ function toReviewPayload(): CoffeeReviewPayload {
   }
 }
 
+function toBrewPayload(): BrewRecordPayload {
+  const brewMethod = brewForm.brewMethod.trim()
+
+  if (!brewMethod) {
+    throw new Error('冲煮方式不能为空。')
+  }
+
+  return {
+    brewMethod,
+    beanAmountGrams: positiveNumberOrNull(brewForm.beanAmountGrams, '粉量'),
+    waterAmountMl: positiveNumberOrNull(brewForm.waterAmountMl, '水量'),
+    ratio: emptyToNull(brewForm.ratio),
+    waterTemperature: positiveNumberOrNull(brewForm.waterTemperature, '水温'),
+    grindSize: emptyToNull(brewForm.grindSize),
+    brewTimeSeconds: positiveIntegerOrNull(brewForm.brewTimeSeconds, '冲煮时长'),
+    resultSummary: emptyToNull(brewForm.resultSummary),
+    resultNotes: emptyToNull(brewForm.resultNotes),
+    isRecommended: brewForm.isRecommended,
+  }
+}
+
 function emptyToNull(value: string) {
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
@@ -774,6 +1078,16 @@ function nonNegativeNumberOrNull(value: string | number, label: string) {
 
   if (parsed !== null && parsed < 0) {
     throw new Error(`${label}不能小于 0。`)
+  }
+
+  return parsed
+}
+
+function positiveIntegerOrNull(value: string | number, label: string) {
+  const parsed = positiveNumberOrNull(value, label)
+
+  if (parsed !== null && !Number.isInteger(parsed)) {
+    throw new Error(`${label}必须是整数。`)
   }
 
   return parsed
@@ -954,6 +1268,14 @@ function display(value: string | number | null | undefined) {
                     @click="openReviewDialog(bean)"
                   >
                     评价
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    :disabled="saving || deletingId !== null || editingLoadingId !== null"
+                    @click="openBrewDialog(bean)"
+                  >
+                    冲煮
                   </button>
                   <button
                     type="button"
@@ -1318,6 +1640,222 @@ function display(value: string | number | null | undefined) {
               取消
             </button>
             <button type="submit" :disabled="reviewSaving">{{ reviewSubmitText }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div v-if="isBrewDialogOpen" class="dialog-backdrop" role="presentation" @click.self="closeBrewDialog">
+      <section
+        class="dialog-panel brew-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="brew-dialog-title"
+        aria-describedby="brew-dialog-description"
+      >
+        <header class="dialog-header">
+          <div>
+            <h2 id="brew-dialog-title">{{ brewDialogTitle }}</h2>
+            <p id="brew-dialog-description">{{ brewPageState.total }} 条冲煮记录</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            :disabled="brewSaving || brewDeletingId !== null"
+            aria-label="关闭冲煮记录"
+            @click="closeBrewDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <section class="review-list-panel">
+          <div class="review-list-header">
+            <h3>冲煮记录列表</h3>
+            <div class="row-actions">
+              <button type="button" :disabled="brewLoading" @click="startCreateBrew">
+                新增冲煮记录
+              </button>
+              <button
+                type="button"
+                class="secondary compact-button"
+                :disabled="brewLoading"
+                @click="fetchBrewRecords"
+              >
+                刷新
+              </button>
+            </div>
+          </div>
+
+          <p v-if="brewError" class="alert error">{{ brewError }}</p>
+          <p v-if="brewNotice" class="alert success">{{ brewNotice }}</p>
+
+          <div v-if="brewLoading" class="state-box review-state">正在加载冲煮记录...</div>
+          <div v-else-if="!hasBrewRecords" class="state-box empty review-state">暂无冲煮记录。</div>
+          <div v-else class="review-list">
+            <article v-for="record in brewRecords" :key="record.id" class="review-card">
+              <header class="review-card-header">
+                <div>
+                  <strong>{{ display(record.brewMethod) }}</strong>
+                  <span>{{ display(record.createdAt) }}</span>
+                </div>
+                <div class="row-actions">
+                  <button
+                    type="button"
+                    class="secondary compact-button"
+                    :disabled="brewSaving || brewDeletingId !== null"
+                    @click="startEditBrew(record)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    type="button"
+                    class="danger compact-button"
+                    :disabled="brewDeletingId === record.id"
+                    @click="confirmDeleteBrew(record)"
+                  >
+                    {{ brewDeletingId === record.id ? '删除中' : '删除' }}
+                  </button>
+                </div>
+              </header>
+
+              <dl class="brew-detail-list">
+                <div>
+                  <dt>粉量 g</dt>
+                  <dd>{{ display(record.beanAmountGrams) }}</dd>
+                </div>
+                <div>
+                  <dt>水量 ml</dt>
+                  <dd>{{ display(record.waterAmountMl) }}</dd>
+                </div>
+                <div>
+                  <dt>比例</dt>
+                  <dd>{{ display(record.ratio) }}</dd>
+                </div>
+                <div>
+                  <dt>水温</dt>
+                  <dd>{{ display(record.waterTemperature) }}</dd>
+                </div>
+                <div>
+                  <dt>研磨</dt>
+                  <dd>{{ display(record.grindSize) }}</dd>
+                </div>
+                <div>
+                  <dt>时长 s</dt>
+                  <dd>{{ display(record.brewTimeSeconds) }}</dd>
+                </div>
+              </dl>
+
+              <p class="review-content">{{ display(record.resultSummary) }}</p>
+              <p class="review-content">{{ display(record.resultNotes) }}</p>
+              <span v-if="record.isRecommended" class="recommend-badge">推荐参数</span>
+            </article>
+          </div>
+
+          <div v-if="brewPageState.total > 0" class="pagination review-pagination">
+            <button
+              type="button"
+              class="secondary"
+              :disabled="!canBrewGoPrevious"
+              @click="changeBrewPage(brewQuery.page - 1)"
+            >
+              上一页
+            </button>
+            <span>第 {{ brewQuery.page }} / {{ effectiveBrewTotalPages }} 页</span>
+            <button
+              type="button"
+              class="secondary"
+              :disabled="!canBrewGoNext"
+              @click="changeBrewPage(brewQuery.page + 1)"
+            >
+              下一页
+            </button>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <div v-if="isBrewFormDialogOpen" class="dialog-backdrop" role="presentation" @click.self="closeBrewFormDialog">
+      <section
+        class="dialog-panel brew-form-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="brew-form-dialog-title"
+      >
+        <header class="dialog-header">
+          <div>
+            <h2 id="brew-form-dialog-title">{{ brewFormTitle }}</h2>
+            <p>{{ selectedBrewBean?.name || '咖啡豆冲煮记录' }}</p>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            :disabled="brewSaving"
+            aria-label="关闭冲煮记录表单"
+            @click="closeBrewFormDialog"
+          >
+            ×
+          </button>
+        </header>
+
+        <form class="brew-form" @submit.prevent="submitBrewForm">
+          <p v-if="brewFormError" class="alert error form-alert">{{ brewFormError }}</p>
+
+          <label class="field wide">
+            <span>冲煮方式 *</span>
+            <input v-model.trim="brewForm.brewMethod" type="text" maxlength="64" required />
+          </label>
+
+          <label class="field">
+            <span>粉量 g</span>
+            <input v-model.trim="brewForm.beanAmountGrams" type="number" min="0.01" step="0.01" />
+          </label>
+
+          <label class="field">
+            <span>水量 ml</span>
+            <input v-model.trim="brewForm.waterAmountMl" type="number" min="0.01" step="0.01" />
+          </label>
+
+          <label class="field">
+            <span>比例</span>
+            <input v-model.trim="brewForm.ratio" type="text" maxlength="32" placeholder="1:15" />
+          </label>
+
+          <label class="field">
+            <span>水温</span>
+            <input v-model.trim="brewForm.waterTemperature" type="number" min="0.01" step="any" />
+          </label>
+
+          <label class="field">
+            <span>研磨度</span>
+            <input v-model.trim="brewForm.grindSize" type="text" maxlength="128" />
+          </label>
+
+          <label class="field">
+            <span>冲煮时长 s</span>
+            <input v-model.trim="brewForm.brewTimeSeconds" type="number" min="1" step="1" />
+          </label>
+
+          <label class="field wide">
+            <span>结果摘要</span>
+            <input v-model.trim="brewForm.resultSummary" type="text" maxlength="255" />
+          </label>
+
+          <label class="field wide">
+            <span>复盘备注</span>
+            <textarea v-model.trim="brewForm.resultNotes" rows="5"></textarea>
+          </label>
+
+          <label class="checkbox-field wide">
+            <input v-model="brewForm.isRecommended" type="checkbox" />
+            <span>标记为推荐参数</span>
+          </label>
+
+          <div class="form-actions">
+            <button type="button" class="secondary" :disabled="brewSaving" @click="closeBrewFormDialog">
+              取消
+            </button>
+            <button type="submit" :disabled="brewSaving">{{ brewSubmitText }}</button>
           </div>
         </form>
       </section>
