@@ -212,6 +212,9 @@ const brewPageState = reactive({
 })
 const brewForm = reactive<BrewForm>({ ...defaultBrewForm })
 
+let reviewFetchVersion = 0
+let brewFetchVersion = 0
+
 const formTitle = computed(() => (formMode.value === 'edit' ? '编辑咖啡豆' : '新增咖啡豆'))
 const formDescription = computed(() => {
   if (formMode.value === 'edit' && editingId.value !== null) {
@@ -397,36 +400,59 @@ async function openReviewDialog(bean: CoffeeBeanListItem) {
 }
 
 async function fetchReviews() {
-  if (!selectedReviewBean.value) {
+  const beanId = selectedReviewBean.value?.id
+
+  if (!beanId) {
     return
   }
 
+  const fetchVersion = ++reviewFetchVersion
   reviewLoading.value = true
   reviewError.value = ''
 
   try {
-    const page = await listCoffeeReviews(selectedReviewBean.value.id, {
+    const page = await listCoffeeReviews(beanId, {
       page: reviewQuery.page,
       pageSize: reviewQuery.pageSize,
     })
 
+    if (!isCurrentReviewFetch(beanId, fetchVersion)) {
+      return
+    }
+
     if (reviewQuery.page > 1 && page.items.length === 0 && page.total > 0) {
       reviewQuery.page = Math.max(1, page.totalPages)
-      applyReviewPage(
-        await listCoffeeReviews(selectedReviewBean.value.id, {
-          page: reviewQuery.page,
-          pageSize: reviewQuery.pageSize,
-        }),
-      )
+      const fallbackPage = await listCoffeeReviews(beanId, {
+        page: reviewQuery.page,
+        pageSize: reviewQuery.pageSize,
+      })
+
+      if (!isCurrentReviewFetch(beanId, fetchVersion)) {
+        return
+      }
+
+      applyReviewPage(fallbackPage)
       return
     }
 
     applyReviewPage(page)
   } catch (caughtError) {
-    reviewError.value = getRequestErrorMessage(caughtError)
+    if (isCurrentReviewFetch(beanId, fetchVersion)) {
+      reviewError.value = getRequestErrorMessage(caughtError)
+    }
   } finally {
-    reviewLoading.value = false
+    if (isCurrentReviewFetch(beanId, fetchVersion)) {
+      reviewLoading.value = false
+    }
   }
+}
+
+function isCurrentReviewFetch(beanId: number, fetchVersion: number) {
+  return (
+    fetchVersion === reviewFetchVersion &&
+    isReviewDialogOpen.value &&
+    selectedReviewBean.value?.id === beanId
+  )
 }
 
 function applyReviewPage(page: PageResponse<CoffeeReview>) {
@@ -488,6 +514,7 @@ async function submitReviewForm() {
       reviewNotice.value = '评价已更新。'
     } else {
       await createCoffeeReview(selectedReviewBean.value.id, payload)
+      reviewQuery.page = 1
       reviewNotice.value = '评价已新增。'
     }
 
@@ -534,6 +561,7 @@ function closeReviewDialog() {
     return
   }
 
+  reviewFetchVersion += 1
   isReviewDialogOpen.value = false
   isReviewFormDialogOpen.value = false
   selectedReviewBean.value = null
@@ -564,36 +592,59 @@ async function openBrewDialog(bean: CoffeeBeanListItem) {
 }
 
 async function fetchBrewRecords() {
-  if (!selectedBrewBean.value) {
+  const beanId = selectedBrewBean.value?.id
+
+  if (!beanId) {
     return
   }
 
+  const fetchVersion = ++brewFetchVersion
   brewLoading.value = true
   brewError.value = ''
 
   try {
-    const page = await listBrewRecords(selectedBrewBean.value.id, {
+    const page = await listBrewRecords(beanId, {
       page: brewQuery.page,
       pageSize: brewQuery.pageSize,
     })
 
+    if (!isCurrentBrewFetch(beanId, fetchVersion)) {
+      return
+    }
+
     if (brewQuery.page > 1 && page.items.length === 0 && page.total > 0) {
       brewQuery.page = Math.max(1, page.totalPages)
-      applyBrewPage(
-        await listBrewRecords(selectedBrewBean.value.id, {
-          page: brewQuery.page,
-          pageSize: brewQuery.pageSize,
-        }),
-      )
+      const fallbackPage = await listBrewRecords(beanId, {
+        page: brewQuery.page,
+        pageSize: brewQuery.pageSize,
+      })
+
+      if (!isCurrentBrewFetch(beanId, fetchVersion)) {
+        return
+      }
+
+      applyBrewPage(fallbackPage)
       return
     }
 
     applyBrewPage(page)
   } catch (caughtError) {
-    brewError.value = getRequestErrorMessage(caughtError)
+    if (isCurrentBrewFetch(beanId, fetchVersion)) {
+      brewError.value = getRequestErrorMessage(caughtError)
+    }
   } finally {
-    brewLoading.value = false
+    if (isCurrentBrewFetch(beanId, fetchVersion)) {
+      brewLoading.value = false
+    }
   }
+}
+
+function isCurrentBrewFetch(beanId: number, fetchVersion: number) {
+  return (
+    fetchVersion === brewFetchVersion &&
+    isBrewDialogOpen.value &&
+    selectedBrewBean.value?.id === beanId
+  )
 }
 
 function applyBrewPage(page: PageResponse<BrewRecord>) {
@@ -655,6 +706,7 @@ async function submitBrewForm() {
       brewNotice.value = '冲煮记录已更新。'
     } else {
       await createBrewRecord(selectedBrewBean.value.id, payload)
+      brewQuery.page = 1
       brewNotice.value = '冲煮记录已新增。'
     }
 
@@ -701,6 +753,7 @@ function closeBrewDialog() {
     return
   }
 
+  brewFetchVersion += 1
   isBrewDialogOpen.value = false
   isBrewFormDialogOpen.value = false
   selectedBrewBean.value = null
@@ -776,6 +829,7 @@ async function submitForm() {
       await updateCoffeeBean(editingId.value, payload)
     } else {
       await createCoffeeBean(payload)
+      filters.page = 1
     }
 
     isDialogOpen.value = false
@@ -928,6 +982,7 @@ function closeCoverPreview() {
 
 function resetReviewState() {
   reviews.value = []
+  reviewLoading.value = false
   reviewPageState.total = 0
   reviewPageState.totalPages = 0
   reviewError.value = ''
@@ -957,6 +1012,7 @@ function fillReviewForm(review: CoffeeReview) {
 
 function resetBrewState() {
   brewRecords.value = []
+  brewLoading.value = false
   brewPageState.total = 0
   brewPageState.totalPages = 0
   brewError.value = ''
@@ -1288,7 +1344,7 @@ function display(value: string | number | null | undefined) {
                   <button
                     type="button"
                     class="danger"
-                    :disabled="deletingId === bean.id"
+                    :disabled="deletingId !== null"
                     @click="confirmDelete(bean)"
                   >
                     {{ deletingId === bean.id ? '删除中' : '删除' }}
@@ -1543,7 +1599,7 @@ function display(value: string | number | null | undefined) {
                   <button
                     type="button"
                     class="danger compact-button"
-                    :disabled="reviewDeletingId === review.id"
+                    :disabled="reviewDeletingId !== null"
                     @click="confirmDeleteReview(review)"
                   >
                     {{ reviewDeletingId === review.id ? '删除中' : '删除' }}
@@ -1711,7 +1767,7 @@ function display(value: string | number | null | undefined) {
                   <button
                     type="button"
                     class="danger compact-button"
-                    :disabled="brewDeletingId === record.id"
+                    :disabled="brewDeletingId !== null"
                     @click="confirmDeleteBrew(record)"
                   >
                     {{ brewDeletingId === record.id ? '删除中' : '删除' }}
