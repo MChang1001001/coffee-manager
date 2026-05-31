@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS coffee_beans (
     roast_level VARCHAR(64) DEFAULT NULL COMMENT '烘焙度',
     roaster VARCHAR(128) DEFAULT NULL COMMENT '烘焙商',
     roast_date DATE DEFAULT NULL COMMENT '烘焙日期',
+    best_from_date DATE DEFAULT NULL COMMENT '赏味开始日期',
+    best_to_date DATE DEFAULT NULL COMMENT '赏味结束日期',
     purchase_date DATE DEFAULT NULL COMMENT '购买日期',
     open_date DATE DEFAULT NULL COMMENT '开封日期',
     finish_date DATE DEFAULT NULL COMMENT '喝完日期',

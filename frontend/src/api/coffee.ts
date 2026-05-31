@@ -26,6 +26,8 @@ export interface CoffeeBeanListItem {
   roastLevel: string | null
   roaster: string | null
   roastDate: string | null
+  bestFromDate: string | null
+  bestToDate: string | null
   purchaseDate: string | null
   status: string | null
   coverImageUrl: string | null
@@ -45,6 +47,8 @@ export interface CoffeeBeanPayload {
   roastLevel: string | null
   roaster: string | null
   roastDate: string | null
+  bestFromDate: string | null
+  bestToDate: string | null
   purchaseDate: string | null
   openDate: string | null
   finishDate: string | null

@@ -31,6 +31,7 @@
 - `GET /api/coffee-beans/{id}` 咖啡豆详情。
 - `PUT /api/coffee-beans/{id}` 更新咖啡豆。
 - `DELETE /api/coffee-beans/{id}` 删除咖啡豆。
+- 咖啡豆新增 / 更新 / 详情 / 列表支持 `roastDate`、`bestFromDate`、`bestToDate`，日期格式为 `YYYY-MM-DD`，可为空。
 
 ## Files
 

@@ -43,6 +43,8 @@ interface CoffeeBeanForm {
   roastLevel: string
   roaster: string
   roastDate: string
+  bestFromDate: string
+  bestToDate: string
   purchaseDate: string
   openDate: string
   finishDate: string
@@ -90,6 +92,8 @@ const defaultForm: CoffeeBeanForm = {
   roastLevel: '',
   roaster: '',
   roastDate: '',
+  bestFromDate: '',
+  bestToDate: '',
   purchaseDate: '',
   openDate: '',
   finishDate: '',
@@ -921,6 +925,8 @@ function fillForm(detail: CoffeeBeanDetail) {
     roastLevel: valueToString(detail.roastLevel),
     roaster: valueToString(detail.roaster),
     roastDate: valueToString(detail.roastDate),
+    bestFromDate: valueToString(detail.bestFromDate),
+    bestToDate: valueToString(detail.bestToDate),
     purchaseDate: valueToString(detail.purchaseDate),
     openDate: valueToString(detail.openDate),
     finishDate: valueToString(detail.finishDate),
@@ -1081,6 +1087,8 @@ function toPayload(): CoffeeBeanPayload {
     roastLevel: emptyToNull(form.roastLevel),
     roaster: emptyToNull(form.roaster),
     roastDate: emptyToNull(form.roastDate),
+    bestFromDate: emptyToNull(form.bestFromDate),
+    bestToDate: emptyToNull(form.bestToDate),
     purchaseDate: emptyToNull(form.purchaseDate),
     openDate: emptyToNull(form.openDate),
     finishDate: emptyToNull(form.finishDate),
@@ -1223,6 +1231,82 @@ function display(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '-' : value
 }
 
+function dateDisplay(value: string | null | undefined) {
+  return value?.trim() ? value : '未填写'
+}
+
+function bestPeriodText(bean: Pick<CoffeeBeanListItem, 'bestFromDate' | 'bestToDate'>) {
+  if (!bean.bestFromDate && !bean.bestToDate) {
+    return '未填写'
+  }
+
+  return `${dateDisplay(bean.bestFromDate)} ~ ${dateDisplay(bean.bestToDate)}`
+}
+
+function drinkStatusLabel(bean: Pick<CoffeeBeanListItem, 'bestFromDate' | 'bestToDate'>) {
+  return drinkStatus(bean).label
+}
+
+function drinkStatusClass(bean: Pick<CoffeeBeanListItem, 'bestFromDate' | 'bestToDate'>) {
+  return drinkStatus(bean).className
+}
+
+function drinkStatus(bean: Pick<CoffeeBeanListItem, 'bestFromDate' | 'bestToDate'>) {
+  if (!bean.bestFromDate || !bean.bestToDate) {
+    return { label: '未填写日期', className: 'missing' }
+  }
+
+  const today = todayDateString()
+
+  if (today < bean.bestFromDate) {
+    return { label: '养豆中', className: 'resting' }
+  }
+
+  if (today > bean.bestToDate) {
+    return { label: '已过赏味期', className: 'expired' }
+  }
+
+  if (daysBetweenLocalDates(today, bean.bestToDate) <= 7) {
+    return { label: '即将过赏味期', className: 'expiring' }
+  }
+
+  return { label: '赏味期中', className: 'ready' }
+}
+
+function todayDateString() {
+  const today = new Date()
+  return [
+    today.getFullYear(),
+    padDatePart(today.getMonth() + 1),
+    padDatePart(today.getDate()),
+  ].join('-')
+}
+
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0')
+}
+
+function daysBetweenLocalDates(from: string, to: string) {
+  const fromDate = parseLocalDate(from)
+  const toDate = parseLocalDate(to)
+
+  if (!fromDate || !toDate) {
+    return Number.POSITIVE_INFINITY
+  }
+
+  return Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000)
+}
+
+function parseLocalDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+
+  if (!year || !month || !day) {
+    return null
+  }
+
+  return new Date(year, month - 1, day)
+}
+
 function normalizeStatus(value: string | null | undefined) {
   return value?.trim().toUpperCase() ?? ''
 }
@@ -1318,8 +1402,20 @@ function joinParts(...parts: Array<string | null | undefined>) {
                 <dd>{{ display(featuredBean.roaster) }}</dd>
               </div>
               <div>
-                <dt>状态</dt>
-                <dd>{{ statusLabel(featuredBean.status) }}</dd>
+                <dt>烘焙日期</dt>
+                <dd>{{ dateDisplay(featuredBean.roastDate) }}</dd>
+              </div>
+              <div>
+                <dt>赏味期</dt>
+                <dd>{{ bestPeriodText(featuredBean) }}</dd>
+              </div>
+              <div>
+                <dt>饮用状态</dt>
+                <dd>
+                  <span class="drink-status-badge" :class="drinkStatusClass(featuredBean)">
+                    {{ drinkStatusLabel(featuredBean) }}
+                  </span>
+                </dd>
               </div>
             </dl>
             <p class="featured-note">
@@ -1481,7 +1577,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
           <span>烘焙商</span>
           <span>烘焙度</span>
           <span>处理法</span>
-          <span>产地</span>
+          <span>赏味期</span>
           <span>记录</span>
           <span>操作</span>
         </div>
@@ -1517,7 +1613,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
           <div class="archive-cell">
             <span class="cell-label">烘焙度</span>
             <strong>{{ display(bean.roastLevel) }}</strong>
-            <small>{{ display(bean.roastDate) }}</small>
+            <small>烘焙 {{ dateDisplay(bean.roastDate) }}</small>
           </div>
 
           <div class="archive-cell">
@@ -1525,10 +1621,12 @@ function joinParts(...parts: Array<string | null | undefined>) {
             <strong>{{ display(bean.processMethod) }}</strong>
           </div>
 
-          <div class="archive-cell">
-            <span class="cell-label">产地</span>
-            <strong>{{ display(bean.origin) }}</strong>
-            <small>{{ display(bean.region) }}</small>
+          <div class="archive-cell taste-window-cell">
+            <span class="cell-label">赏味期</span>
+            <strong>{{ bestPeriodText(bean) }}</strong>
+            <span class="drink-status-badge" :class="drinkStatusClass(bean)">
+              {{ drinkStatusLabel(bean) }}
+            </span>
           </div>
 
           <div class="archive-records">
@@ -1679,6 +1777,16 @@ function joinParts(...parts: Array<string | null | undefined>) {
           <label class="field">
             <span>烘焙日期</span>
             <input v-model="form.roastDate" type="date" />
+          </label>
+
+          <label class="field">
+            <span>赏味开始日期</span>
+            <input v-model="form.bestFromDate" type="date" />
+          </label>
+
+          <label class="field">
+            <span>赏味结束日期</span>
+            <input v-model="form.bestToDate" type="date" />
           </label>
 
           <label class="field">

@@ -117,6 +117,23 @@ Get-Content -Raw -Encoding UTF8 backend\src\main\resources\db\init.sql | mysql -
 Get-Content -Raw -Encoding UTF8 backend\src\main\resources\db\init.sql | mysql -u你的用户名 -p --default-character-set=utf8mb4
 ```
 
+如果本地已有旧版 `coffee_beans` 表，本轮 v2 养豆期 / 赏味期字段不会被 `CREATE TABLE IF NOT EXISTS` 自动补上。若旧表完全没有这 3 个日期列，执行：
+
+```sql
+ALTER TABLE coffee_beans
+  ADD COLUMN roast_date date null comment '烘焙日期',
+  ADD COLUMN best_from_date date null comment '赏味开始日期',
+  ADD COLUMN best_to_date date null comment '赏味结束日期';
+```
+
+当前 MVP 代码库已有 `roast_date`，多数本地旧库只需要补下面两列：
+
+```sql
+ALTER TABLE coffee_beans
+  ADD COLUMN best_from_date date null comment '赏味开始日期',
+  ADD COLUMN best_to_date date null comment '赏味结束日期';
+```
+
 如果 `mysql` 命令没有加入 PATH，请使用本机 MySQL 客户端完整路径，例如 `C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe`。
 
 执行后确认数据库存在：
@@ -509,6 +526,8 @@ mkdir -p ~/dev/coffee-manager/uploads
 | `GET` | `/api/coffee-beans/{id}` | 咖啡豆详情 |
 | `PUT` | `/api/coffee-beans/{id}` | 更新咖啡豆 |
 | `DELETE` | `/api/coffee-beans/{id}` | 删除咖啡豆 |
+
+Coffee 新增 / 更新 / 详情 / 列表当前支持 `roastDate`、`bestFromDate`、`bestToDate` 日期字段，前端以 `YYYY-MM-DD` 字符串提交和展示；饮用状态由前端根据赏味开始 / 结束日期本地计算。
 
 文件：
 

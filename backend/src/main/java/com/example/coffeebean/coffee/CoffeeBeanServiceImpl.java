@@ -129,6 +129,8 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         coffeeBean.setRoastLevel(normalize(request.getRoastLevel()));
         coffeeBean.setRoaster(normalize(request.getRoaster()));
         coffeeBean.setRoastDate(request.getRoastDate());
+        coffeeBean.setBestFromDate(request.getBestFromDate());
+        coffeeBean.setBestToDate(request.getBestToDate());
         coffeeBean.setPurchaseDate(request.getPurchaseDate());
         coffeeBean.setOpenDate(request.getOpenDate());
         coffeeBean.setFinishDate(request.getFinishDate());
@@ -147,6 +149,8 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         coffeeBean.setRoastLevel(normalize(request.getRoastLevel()));
         coffeeBean.setRoaster(normalize(request.getRoaster()));
         coffeeBean.setRoastDate(request.getRoastDate());
+        coffeeBean.setBestFromDate(request.getBestFromDate());
+        coffeeBean.setBestToDate(request.getBestToDate());
         coffeeBean.setPurchaseDate(request.getPurchaseDate());
         coffeeBean.setOpenDate(request.getOpenDate());
         coffeeBean.setFinishDate(request.getFinishDate());
@@ -166,6 +170,8 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         response.setRoastLevel(coffeeBean.getRoastLevel());
         response.setRoaster(coffeeBean.getRoaster());
         response.setRoastDate(coffeeBean.getRoastDate());
+        response.setBestFromDate(coffeeBean.getBestFromDate());
+        response.setBestToDate(coffeeBean.getBestToDate());
         response.setPurchaseDate(coffeeBean.getPurchaseDate());
         response.setStatus(coffeeBean.getStatus());
         response.setCoverImageUrl(coffeeBean.getCoverImageUrl());
@@ -188,6 +194,8 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         response.setRoastLevel(coffeeBean.getRoastLevel());
         response.setRoaster(coffeeBean.getRoaster());
         response.setRoastDate(coffeeBean.getRoastDate());
+        response.setBestFromDate(coffeeBean.getBestFromDate());
+        response.setBestToDate(coffeeBean.getBestToDate());
         response.setPurchaseDate(coffeeBean.getPurchaseDate());
         response.setOpenDate(coffeeBean.getOpenDate());
         response.setFinishDate(coffeeBean.getFinishDate());

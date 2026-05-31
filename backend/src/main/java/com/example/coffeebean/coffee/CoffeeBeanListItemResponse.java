@@ -25,6 +25,10 @@ public class CoffeeBeanListItemResponse {
 
     private LocalDate roastDate;
 
+    private LocalDate bestFromDate;
+
+    private LocalDate bestToDate;
+
     private LocalDate purchaseDate;
 
     private String status;

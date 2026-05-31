@@ -36,6 +36,10 @@ public class CoffeeBean {
 
     private LocalDate roastDate;
 
+    private LocalDate bestFromDate;
+
+    private LocalDate bestToDate;
+
     private LocalDate purchaseDate;
 
     private LocalDate openDate;

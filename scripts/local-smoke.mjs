@@ -112,6 +112,8 @@ async function smokeCoffee(token) {
       roastLevel: 'Light',
       roaster: 'Smoke Roaster',
       roastDate: '2026-05-01',
+      bestFromDate: '2026-05-08',
+      bestToDate: '2026-06-05',
       purchaseDate: '2026-05-10',
       openDate: null,
       finishDate: null,
@@ -129,6 +131,8 @@ async function smokeCoffee(token) {
 
   const detailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
   assert(detailBody.data?.name === `${smokePrefix} Coffee Bean`, 'Coffee detail name mismatch')
+  assert(detailBody.data?.bestFromDate === '2026-05-08', 'Coffee detail bestFromDate mismatch')
+  assert(detailBody.data?.bestToDate === '2026-06-05', 'Coffee detail bestToDate mismatch')
 
   const updateBody = await requestApi('PUT', `/api/coffee-beans/${state.coffeeId}`, {
     token,
@@ -361,6 +365,8 @@ function buildCoffeeUpdatePayload(coverImageUrl) {
     roastLevel: 'Medium',
     roaster: 'Smoke Roaster',
     roastDate: '2026-05-01',
+    bestFromDate: '2026-05-08',
+    bestToDate: '2026-06-05',
     purchaseDate: '2026-05-10',
     openDate: '2026-05-12',
     finishDate: null,
