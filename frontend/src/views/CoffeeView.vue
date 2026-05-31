@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ensureDevAuth } from '../api/auth'
 import type { UserProfile } from '../api/auth'
 import {
@@ -81,6 +82,7 @@ interface BrewForm {
 }
 
 type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
+type CoffeeRouteAction = 'edit' | 'review' | 'brew'
 
 const defaultForm: CoffeeBeanForm = {
   name: '',
@@ -141,6 +143,8 @@ const reviewRatingFields: Array<{ key: RatingFieldKey; label: string; required?:
 
 const reviewDimensionFields = reviewRatingFields.filter((field) => field.key !== 'overallRating')
 
+const route = useRoute()
+const router = useRouter()
 const currentUser = ref<UserProfile | null>(null)
 const beans = ref<CoffeeBeanListItem[]>([])
 const loading = ref(false)
@@ -181,6 +185,7 @@ const brewMode = ref<'create' | 'edit'>('create')
 const editingBrewId = ref<number | null>(null)
 const isBrewDialogOpen = ref(false)
 const isBrewFormDialogOpen = ref(false)
+const handlingRouteAction = ref(false)
 
 const filters = reactive({
   keyword: '',
@@ -329,6 +334,13 @@ onMounted(() => {
   void bootPage()
 })
 
+watch(
+  () => route.fullPath,
+  () => {
+    void handleRouteBeanAction()
+  },
+)
+
 async function bootPage() {
   loading.value = true
   error.value = ''
@@ -342,6 +354,7 @@ async function bootPage() {
   }
 
   await fetchBeans()
+  await handleRouteBeanAction()
 }
 
 async function fetchBeans() {
@@ -413,6 +426,115 @@ function changePage(page: number) {
 function changePageSize() {
   filters.page = 1
   void fetchBeans()
+}
+
+async function handleRouteBeanAction() {
+  if (handlingRouteAction.value || route.name !== 'coffee') {
+    return
+  }
+
+  const action = parseRouteAction(route.query.action)
+  const beanId = parseRouteBeanId(route.query.beanId)
+
+  if (!action || !beanId) {
+    return
+  }
+
+  handlingRouteAction.value = true
+  error.value = ''
+  notice.value = ''
+
+  try {
+    await openRoutedBeanAction(beanId, action)
+  } catch (caughtError) {
+    error.value = getRequestErrorMessage(caughtError)
+  } finally {
+    await clearRouteBeanAction()
+    handlingRouteAction.value = false
+  }
+}
+
+async function openRoutedBeanAction(beanId: number, action: CoffeeRouteAction) {
+  if (action === 'edit') {
+    editingLoadingId.value = beanId
+
+    try {
+      openEditDetail(await getCoffeeBean(beanId))
+    } finally {
+      editingLoadingId.value = null
+    }
+
+    return
+  }
+
+  const bean = await resolveBeanForAction(beanId)
+
+  if (action === 'review') {
+    await openReviewDialog(bean)
+    return
+  }
+
+  await openBrewDialog(bean)
+}
+
+async function resolveBeanForAction(beanId: number) {
+  const existingBean = beans.value.find((bean) => bean.id === beanId)
+
+  if (existingBean) {
+    return existingBean
+  }
+
+  return detailToListItem(await getCoffeeBean(beanId))
+}
+
+function detailToListItem(detail: CoffeeBeanDetail): CoffeeBeanListItem {
+  return {
+    id: detail.id,
+    name: detail.name,
+    origin: detail.origin,
+    region: detail.region,
+    processMethod: detail.processMethod,
+    roastLevel: detail.roastLevel,
+    roaster: detail.roaster,
+    roastDate: detail.roastDate,
+    bestFromDate: detail.bestFromDate,
+    bestToDate: detail.bestToDate,
+    purchaseDate: detail.purchaseDate,
+    status: detail.status,
+    coverImageUrl: detail.coverImageUrl,
+    overallRating: detail.overallRating,
+    reviewCount: detail.reviewCount,
+    brewCount: detail.brewCount,
+    createdAt: detail.createdAt,
+  }
+}
+
+function parseRouteAction(value: unknown): CoffeeRouteAction | null {
+  const rawValue = Array.isArray(value) ? value[0] : value
+
+  if (rawValue === 'edit' || rawValue === 'review' || rawValue === 'brew') {
+    return rawValue
+  }
+
+  return null
+}
+
+function parseRouteBeanId(value: unknown) {
+  const rawValue = Array.isArray(value) ? value[0] : value
+  const beanId = Number(rawValue)
+
+  return Number.isInteger(beanId) && beanId > 0 ? beanId : null
+}
+
+async function clearRouteBeanAction() {
+  const nextQuery = { ...route.query }
+  delete nextQuery.action
+  delete nextQuery.beanId
+
+  await router.replace({
+    name: 'coffee',
+    query: nextQuery,
+  })
 }
 
 async function openReviewDialog(bean: CoffeeBeanListItem) {
@@ -816,16 +938,19 @@ async function startEdit(bean: CoffeeBeanListItem) {
   editingLoadingId.value = bean.id
 
   try {
-    const detail = await getCoffeeBean(bean.id)
-    editingId.value = bean.id
-    formMode.value = 'edit'
-    fillForm(detail)
-    isDialogOpen.value = true
+    openEditDetail(await getCoffeeBean(bean.id))
   } catch (caughtError) {
     error.value = getRequestErrorMessage(caughtError)
   } finally {
     editingLoadingId.value = null
   }
+}
+
+function openEditDetail(detail: CoffeeBeanDetail) {
+  editingId.value = detail.id
+  formMode.value = 'edit'
+  fillForm(detail)
+  isDialogOpen.value = true
 }
 
 async function submitForm() {
@@ -1423,6 +1548,12 @@ function joinParts(...parts: Array<string | null | undefined>) {
               {{ display(featuredBean.brewCount) }}
             </p>
             <div class="featured-actions">
+              <RouterLink
+                class="button-link secondary compact-button"
+                :to="{ name: 'coffee-bean-detail', params: { id: featuredBean.id } }"
+              >
+                查看档案
+              </RouterLink>
               <button
                 type="button"
                 class="secondary compact-button"
@@ -1636,6 +1767,12 @@ function joinParts(...parts: Array<string | null | undefined>) {
           </div>
 
           <div class="archive-action-group">
+            <RouterLink
+              class="button-link secondary compact-button"
+              :to="{ name: 'coffee-bean-detail', params: { id: bean.id } }"
+            >
+              查看档案
+            </RouterLink>
             <button
               type="button"
               class="secondary compact-button"
