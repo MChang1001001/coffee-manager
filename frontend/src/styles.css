@@ -435,7 +435,8 @@ textarea:focus {
 .bean-cover {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .cover-thumb-button:hover:not(:disabled) .bean-cover,
@@ -854,7 +855,8 @@ h2 {
 .archive-cover {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .featured-cover {
@@ -1285,7 +1287,8 @@ textarea:focus {
 .detail-cover {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .detail-cover-placeholder {
@@ -1511,7 +1514,8 @@ textarea:focus {
 .cover-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
 }
 
 .cover-upload-controls {
