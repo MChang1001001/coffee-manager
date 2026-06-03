@@ -4,10 +4,20 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.coffeebean.brew.BrewRecordMapper;
+import com.example.coffeebean.brew.BrewRecordSummary;
 import com.example.coffeebean.common.BusinessException;
 import com.example.coffeebean.common.ErrorCode;
 import com.example.coffeebean.common.PageResponse;
+import com.example.coffeebean.review.CoffeeReviewMapper;
+import com.example.coffeebean.review.CoffeeReviewSummary;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -16,6 +26,14 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
 
     private static final String DEFAULT_CURRENCY = "CNY";
     private static final String DEFAULT_STATUS = "UNOPENED";
+
+    private final CoffeeReviewMapper coffeeReviewMapper;
+    private final BrewRecordMapper brewRecordMapper;
+
+    public CoffeeBeanServiceImpl(CoffeeReviewMapper coffeeReviewMapper, BrewRecordMapper brewRecordMapper) {
+        this.coffeeReviewMapper = coffeeReviewMapper;
+        this.brewRecordMapper = brewRecordMapper;
+    }
 
     @Override
     public CoffeeBeanIdResponse create(Long userId, CoffeeBeanCreateRequest request) {
@@ -61,16 +79,25 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
 
     @Override
     public CoffeeBeanDetailResponse getDetail(Long userId, Long id) {
-        return toDetailResponse(findOwnedBean(userId, id));
+        CoffeeBean coffeeBean = findOwnedBean(userId, id);
+        CoffeeRecordSummary summary = loadRecordSummaries(userId, List.of(id))
+                .getOrDefault(id, CoffeeRecordSummary.empty());
+        return toDetailResponse(coffeeBean, summary);
     }
 
     @Override
     public PageResponse<CoffeeBeanListItemResponse> list(Long userId, CoffeeBeanListQuery query) {
         Page<CoffeeBean> pageRequest = Page.of(query.resolvedPage(), query.resolvedPageSize());
         Page<CoffeeBean> pageResult = page(pageRequest, buildListWrapper(userId, query));
+        Map<Long, CoffeeRecordSummary> summaries = loadRecordSummaries(userId, pageResult.getRecords()
+                .stream()
+                .map(CoffeeBean::getId)
+                .toList());
         List<CoffeeBeanListItemResponse> items = pageResult.getRecords()
                 .stream()
-                .map(this::toListItemResponse)
+                .map(coffeeBean -> toListItemResponse(
+                        coffeeBean,
+                        summaries.getOrDefault(coffeeBean.getId(), CoffeeRecordSummary.empty())))
                 .toList();
         return PageResponse.of(items, pageResult.getCurrent(), pageResult.getSize(), pageResult.getTotal());
     }
@@ -160,7 +187,32 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         coffeeBean.setNotes(normalize(request.getNotes()));
     }
 
-    private CoffeeBeanListItemResponse toListItemResponse(CoffeeBean coffeeBean) {
+    private Map<Long, CoffeeRecordSummary> loadRecordSummaries(Long userId, List<Long> coffeeBeanIds) {
+        if (coffeeBeanIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, CoffeeReviewSummary> reviewSummaries = coffeeReviewMapper.selectSummaries(userId, coffeeBeanIds)
+                .stream()
+                .collect(Collectors.toMap(CoffeeReviewSummary::getCoffeeBeanId, Function.identity()));
+        Map<Long, BrewRecordSummary> brewSummaries = brewRecordMapper.selectSummaries(userId, coffeeBeanIds)
+                .stream()
+                .collect(Collectors.toMap(BrewRecordSummary::getCoffeeBeanId, Function.identity()));
+
+        return coffeeBeanIds.stream()
+                .distinct()
+                .collect(Collectors.toMap(Function.identity(), coffeeBeanId -> {
+                    CoffeeReviewSummary reviewSummary = reviewSummaries.get(coffeeBeanId);
+                    BrewRecordSummary brewSummary = brewSummaries.get(coffeeBeanId);
+
+                    return new CoffeeRecordSummary(
+                            normalizeRating(reviewSummary == null ? null : reviewSummary.getOverallRating()),
+                            toCount(reviewSummary == null ? null : reviewSummary.getReviewCount()),
+                            toCount(brewSummary == null ? null : brewSummary.getBrewCount()));
+                }));
+    }
+
+    private CoffeeBeanListItemResponse toListItemResponse(CoffeeBean coffeeBean, CoffeeRecordSummary summary) {
         CoffeeBeanListItemResponse response = new CoffeeBeanListItemResponse();
         response.setId(coffeeBean.getId());
         response.setName(coffeeBean.getName());
@@ -175,14 +227,14 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         response.setPurchaseDate(coffeeBean.getPurchaseDate());
         response.setStatus(coffeeBean.getStatus());
         response.setCoverImageUrl(coffeeBean.getCoverImageUrl());
-        response.setOverallRating(coffeeBean.getOverallRating());
-        response.setReviewCount(coffeeBean.getReviewCount());
-        response.setBrewCount(coffeeBean.getBrewCount());
+        response.setOverallRating(summary.overallRating());
+        response.setReviewCount(summary.reviewCount());
+        response.setBrewCount(summary.brewCount());
         response.setCreatedAt(coffeeBean.getCreatedAt());
         return response;
     }
 
-    private CoffeeBeanDetailResponse toDetailResponse(CoffeeBean coffeeBean) {
+    private CoffeeBeanDetailResponse toDetailResponse(CoffeeBean coffeeBean, CoffeeRecordSummary summary) {
         CoffeeBeanDetailResponse response = new CoffeeBeanDetailResponse();
         response.setId(coffeeBean.getId());
         response.setName(coffeeBean.getName());
@@ -204,13 +256,25 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         response.setCurrency(coffeeBean.getCurrency());
         response.setStatus(coffeeBean.getStatus());
         response.setCoverImageUrl(coffeeBean.getCoverImageUrl());
-        response.setOverallRating(coffeeBean.getOverallRating());
-        response.setReviewCount(coffeeBean.getReviewCount());
-        response.setBrewCount(coffeeBean.getBrewCount());
+        response.setOverallRating(summary.overallRating());
+        response.setReviewCount(summary.reviewCount());
+        response.setBrewCount(summary.brewCount());
         response.setNotes(coffeeBean.getNotes());
         response.setCreatedAt(coffeeBean.getCreatedAt());
         response.setUpdatedAt(coffeeBean.getUpdatedAt());
         return response;
+    }
+
+    private BigDecimal normalizeRating(BigDecimal value) {
+        if (value == null) {
+            return null;
+        }
+
+        return value.setScale(1, RoundingMode.HALF_UP);
+    }
+
+    private Integer toCount(Long value) {
+        return value == null ? 0 : Math.toIntExact(value);
     }
 
     private String normalize(String value) {
@@ -231,5 +295,12 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
             throw new BusinessException(ErrorCode.PARAM_ERROR, message);
         }
         return normalized;
+    }
+
+    private record CoffeeRecordSummary(BigDecimal overallRating, Integer reviewCount, Integer brewCount) {
+
+        private static CoffeeRecordSummary empty() {
+            return new CoffeeRecordSummary(null, 0, 0);
+        }
     }
 }

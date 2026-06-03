@@ -669,6 +669,7 @@ async function submitReviewForm() {
     isReviewFormDialogOpen.value = false
     resetReviewForm()
     await fetchReviews()
+    await fetchBeans()
   } catch (caughtError) {
     reviewFormError.value = getRequestErrorMessage(caughtError)
   } finally {
@@ -697,6 +698,7 @@ async function confirmDeleteReview(review: CoffeeReview) {
 
     reviewNotice.value = '评价已删除。'
     await fetchReviews()
+    await fetchBeans()
   } catch (caughtError) {
     reviewError.value = getRequestErrorMessage(caughtError)
   } finally {
@@ -861,6 +863,7 @@ async function submitBrewForm() {
     isBrewFormDialogOpen.value = false
     resetBrewForm()
     await fetchBrewRecords()
+    await fetchBeans()
   } catch (caughtError) {
     brewFormError.value = getRequestErrorMessage(caughtError)
   } finally {
@@ -889,6 +892,7 @@ async function confirmDeleteBrew(record: BrewRecord) {
 
     brewNotice.value = '冲煮记录已删除。'
     await fetchBrewRecords()
+    await fetchBeans()
   } catch (caughtError) {
     brewError.value = getRequestErrorMessage(caughtError)
   } finally {
