@@ -6,6 +6,8 @@
 
 它不是完整单文件应用，不包含 MySQL，不内置 Java/Maven/Node/npm，也不会把前端静态资源合并进后端。当前目标是方便本机日常启动本项目的 Spring Boot 后端和 Vite 前端。
 
+v0.2 本地版中，启动器一期属于本地可复现启动能力的一部分。它负责启动或复用本机后端和前端服务，不改变数据库结构，不执行 migration，不替代 `node scripts\local-smoke.mjs`。
+
 ## 2. 前置条件
 
 - Windows + PowerShell。
@@ -77,7 +79,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-status.ps1
 
 如果服务未启动，脚本会提示下一步启动命令。
 
-## 6. 如何查看日志
+## 6. 启动后如何烟测
+
+启动器确认后端和前端可访问后，建议在项目根目录执行一次本地烟测：
+
+```powershell
+node scripts\local-smoke.mjs
+```
+
+预期输出：
+
+```text
+SMOKE_TEST_RESULT: PASS
+```
+
+烟测会创建带 `[SMOKE_TEST]` 前缀的 coffee / review / brew 测试数据，删除接口当前是逻辑删除，因此 MySQL 中可能留下 `deleted=1` 记录。烟测还会上传一张测试封面，本地 uploads 目录可能留下测试文件。
+
+## 7. 如何查看日志
 
 启动脚本会自动创建：
 
@@ -104,7 +122,7 @@ Get-Content .\logs\frontend.log -Wait
 
 `logs/` 属于本地运行产物，已被 `.gitignore` 忽略，不建议提交。
 
-## 7. 如何生成 exe
+## 8. 如何生成 exe
 
 推荐使用 PowerShell 脚本作为真实启动逻辑，再用 `ps2exe` 包装成 `喝咖啡.exe`。
 
@@ -133,7 +151,7 @@ launcher/喝咖啡.exe
 - exe 不会自动安装前端依赖；如果缺少 `frontend/node_modules`，请先运行 `npm install`。
 - 如果 PowerShell Gallery 不可访问，无法安装 `ps2exe`，可以先直接使用 `scripts/local-start.ps1`。
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### 端口被占用
 
@@ -190,3 +208,21 @@ Get-Content .\logs\backend.log -Tail 120
 ```
 
 常见原因包括 MySQL 未启动、数据库未初始化、数据库账号密码不匹配、`mvn` 不在 PATH、端口 `8080` 被其他进程占用。
+
+### 前端页面打不开
+
+先运行状态脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local-status.ps1
+```
+
+如果 `5173` 未监听，检查 `frontend/node_modules` 是否存在，并查看：
+
+```powershell
+Get-Content .\logs\frontend.log -Tail 120
+```
+
+### 封面图片显示占位
+
+历史旧封面文件如果已经不存在，页面会使用兜底占位展示。这是 v0.2 本地版已接受行为，不影响 Coffee 列表、详情、评价和冲煮主链路。
