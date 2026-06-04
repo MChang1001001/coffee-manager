@@ -6,12 +6,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.coffeebean.coffee.CoffeeBean;
 import com.example.coffeebean.coffee.CoffeeBeanMapper;
+import com.example.coffeebean.coffee.CoffeeBeanService;
 import com.example.coffeebean.common.BusinessException;
 import com.example.coffeebean.common.ErrorCode;
 import com.example.coffeebean.common.PageResponse;
 import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -23,12 +25,15 @@ public class CoffeeReviewServiceImpl extends ServiceImpl<CoffeeReviewMapper, Cof
     private static final BigDecimal RATING_STEP = new BigDecimal("0.5");
 
     private final CoffeeBeanMapper coffeeBeanMapper;
+    private final CoffeeBeanService coffeeBeanService;
 
-    public CoffeeReviewServiceImpl(CoffeeBeanMapper coffeeBeanMapper) {
+    public CoffeeReviewServiceImpl(CoffeeBeanMapper coffeeBeanMapper, CoffeeBeanService coffeeBeanService) {
         this.coffeeBeanMapper = coffeeBeanMapper;
+        this.coffeeBeanService = coffeeBeanService;
     }
 
     @Override
+    @Transactional
     public CoffeeReviewIdResponse create(Long userId, Long coffeeBeanId, CoffeeReviewCreateRequest request) {
         ensureOwnedCoffeeBean(userId, coffeeBeanId);
 
@@ -38,6 +43,7 @@ public class CoffeeReviewServiceImpl extends ServiceImpl<CoffeeReviewMapper, Cof
         fillCreateFields(review, request);
         review.setDeleted(0);
         save(review);
+        coffeeBeanService.refreshReviewAggregates(coffeeBeanId, userId);
         return new CoffeeReviewIdResponse(review.getId());
     }
 
@@ -67,8 +73,9 @@ public class CoffeeReviewServiceImpl extends ServiceImpl<CoffeeReviewMapper, Cof
     }
 
     @Override
+    @Transactional
     public boolean update(Long userId, Long id, CoffeeReviewUpdateRequest request) {
-        findOwnedReview(userId, id);
+        CoffeeReview review = findOwnedReview(userId, id);
 
         boolean updated = update(new LambdaUpdateWrapper<CoffeeReview>()
                 .eq(CoffeeReview::getId, id)
@@ -84,12 +91,14 @@ public class CoffeeReviewServiceImpl extends ServiceImpl<CoffeeReviewMapper, Cof
         if (!updated) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "评价不存在");
         }
+        coffeeBeanService.refreshReviewAggregates(review.getCoffeeBeanId(), userId);
         return true;
     }
 
     @Override
+    @Transactional
     public boolean delete(Long userId, Long id) {
-        findOwnedReview(userId, id);
+        CoffeeReview review = findOwnedReview(userId, id);
 
         boolean removed = remove(new LambdaQueryWrapper<CoffeeReview>()
                 .eq(CoffeeReview::getId, id)
@@ -97,6 +106,7 @@ public class CoffeeReviewServiceImpl extends ServiceImpl<CoffeeReviewMapper, Cof
         if (!removed) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "评价不存在");
         }
+        coffeeBeanService.refreshReviewAggregates(review.getCoffeeBeanId(), userId);
         return true;
     }
 

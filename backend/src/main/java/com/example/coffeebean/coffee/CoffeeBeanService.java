@@ -13,4 +13,8 @@ public interface CoffeeBeanService {
     CoffeeBeanDetailResponse getDetail(Long userId, Long id);
 
     PageResponse<CoffeeBeanListItemResponse> list(Long userId, CoffeeBeanListQuery query);
+
+    void refreshReviewAggregates(Long coffeeBeanId, Long userId);
+
+    void refreshBrewAggregates(Long coffeeBeanId, Long userId);
 }

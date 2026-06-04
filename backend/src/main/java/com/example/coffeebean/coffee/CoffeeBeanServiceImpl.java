@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -100,6 +101,38 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
                         summaries.getOrDefault(coffeeBean.getId(), CoffeeRecordSummary.empty())))
                 .toList();
         return PageResponse.of(items, pageResult.getCurrent(), pageResult.getSize(), pageResult.getTotal());
+    }
+
+    @Override
+    @Transactional
+    public void refreshReviewAggregates(Long coffeeBeanId, Long userId) {
+        CoffeeReviewSummary summary = coffeeReviewMapper.selectSummaries(userId, List.of(coffeeBeanId))
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+        update(new LambdaUpdateWrapper<CoffeeBean>()
+                .eq(CoffeeBean::getId, coffeeBeanId)
+                .eq(CoffeeBean::getUserId, userId)
+                .eq(CoffeeBean::getDeleted, 0)
+                .set(CoffeeBean::getReviewCount, toCount(summary == null ? null : summary.getReviewCount()))
+                .set(CoffeeBean::getOverallRating, normalizeRating(
+                        summary == null ? null : summary.getOverallRating())));
+    }
+
+    @Override
+    @Transactional
+    public void refreshBrewAggregates(Long coffeeBeanId, Long userId) {
+        BrewRecordSummary summary = brewRecordMapper.selectSummaries(userId, List.of(coffeeBeanId))
+                .stream()
+                .findFirst()
+                .orElse(null);
+
+        update(new LambdaUpdateWrapper<CoffeeBean>()
+                .eq(CoffeeBean::getId, coffeeBeanId)
+                .eq(CoffeeBean::getUserId, userId)
+                .eq(CoffeeBean::getDeleted, 0)
+                .set(CoffeeBean::getBrewCount, toCount(summary == null ? null : summary.getBrewCount())));
     }
 
     private LambdaQueryWrapper<CoffeeBean> buildListWrapper(Long userId, CoffeeBeanListQuery query) {

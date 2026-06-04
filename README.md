@@ -686,7 +686,7 @@ Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信�
 - JWT 过期与刷新策略仍是开发阶段实现，正式 token 生命周期后续统一处理。
 - 上传文件保存在本地目录，尚未接入云存储或服务器持久化方案。
 - 上传新封面不会自动删除旧文件，图片删除和旧文件清理延后。
-- `review_count`、`overall_rating`、`brew_count` 字段存在于咖啡豆表和响应中，但 MVP 当前不做聚合回写。
+- `review_count`、`overall_rating`、`brew_count` 已在 review / brew 新增、编辑、删除后回写；旧库历史数据可手动执行 `backend/src/main/resources/db/refresh_coffee_aggregates.sql` 修复。
 - roastLevel / processMethod / status 等字段当前以自由输入或前端固定选项为主，尚未统一枚举查询。
 - 数据库脚本包含风味标签相关表和种子数据，但风味标签业务尚未接入。
 - 部分后端错误文案已经中文化，仍存在英文文案；统一中文化延后。
@@ -696,7 +696,6 @@ Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信�
 
 - migration 工具暂不引入，当前继续手动 SQL。
 - 正式登录和 token 生命周期延后。
-- `review_count` / `brew_count` / `overall_rating` 聚合回写延后。
 - 赏味期排序 / 提醒 / 推荐算法延后。
 - 风味标签体系延后。
 - 统计图表延后。

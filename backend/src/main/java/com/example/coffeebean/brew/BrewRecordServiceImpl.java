@@ -6,11 +6,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.coffeebean.coffee.CoffeeBean;
 import com.example.coffeebean.coffee.CoffeeBeanMapper;
+import com.example.coffeebean.coffee.CoffeeBeanService;
 import com.example.coffeebean.common.BusinessException;
 import com.example.coffeebean.common.ErrorCode;
 import com.example.coffeebean.common.PageResponse;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -18,12 +20,15 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
         implements BrewRecordService {
 
     private final CoffeeBeanMapper coffeeBeanMapper;
+    private final CoffeeBeanService coffeeBeanService;
 
-    public BrewRecordServiceImpl(CoffeeBeanMapper coffeeBeanMapper) {
+    public BrewRecordServiceImpl(CoffeeBeanMapper coffeeBeanMapper, CoffeeBeanService coffeeBeanService) {
         this.coffeeBeanMapper = coffeeBeanMapper;
+        this.coffeeBeanService = coffeeBeanService;
     }
 
     @Override
+    @Transactional
     public BrewRecordIdResponse create(Long userId, Long coffeeBeanId, BrewRecordCreateRequest request) {
         ensureOwnedCoffeeBean(userId, coffeeBeanId);
 
@@ -33,6 +38,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
         fillCreateFields(brewRecord, request);
         brewRecord.setDeleted(0);
         save(brewRecord);
+        coffeeBeanService.refreshBrewAggregates(coffeeBeanId, userId);
         return new BrewRecordIdResponse(brewRecord.getId());
     }
 
@@ -62,8 +68,9 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
     }
 
     @Override
+    @Transactional
     public boolean update(Long userId, Long id, BrewRecordUpdateRequest request) {
-        findOwnedBrewRecord(userId, id);
+        BrewRecord brewRecord = findOwnedBrewRecord(userId, id);
 
         boolean updated = update(new LambdaUpdateWrapper<BrewRecord>()
                 .eq(BrewRecord::getId, id)
@@ -81,12 +88,14 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
         if (!updated) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "Brew record not found");
         }
+        coffeeBeanService.refreshBrewAggregates(brewRecord.getCoffeeBeanId(), userId);
         return true;
     }
 
     @Override
+    @Transactional
     public boolean delete(Long userId, Long id) {
-        findOwnedBrewRecord(userId, id);
+        BrewRecord brewRecord = findOwnedBrewRecord(userId, id);
 
         boolean removed = remove(new LambdaQueryWrapper<BrewRecord>()
                 .eq(BrewRecord::getId, id)
@@ -94,6 +103,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
         if (!removed) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "Brew record not found");
         }
+        coffeeBeanService.refreshBrewAggregates(brewRecord.getCoffeeBeanId(), userId);
         return true;
     }
 

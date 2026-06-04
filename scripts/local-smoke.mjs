@@ -16,12 +16,16 @@ const smokePrefix = `[SMOKE_TEST] ${stamp}`
 const state = {
   coffeeId: null,
   reviewId: null,
+  secondReviewId: null,
   brewId: null,
+  secondBrewId: null,
   coverUrl: null,
   deleted: {
     coffee: false,
     review: false,
+    secondReview: false,
     brew: false,
+    secondBrew: false,
   },
   checks: [],
   warnings: [],
@@ -214,6 +218,28 @@ async function smokeReview(token) {
 
   state.reviewId = createBody.data?.id
   assert(Number.isInteger(state.reviewId) && state.reviewId > 0, 'Review create did not return id')
+  await assertCoffeeAggregates(token, { reviewCount: 1, overallRating: 4.5 }, 'after first review create')
+
+  const secondCreateBody = await requestApi('POST', `/api/coffee-beans/${state.coffeeId}/reviews`, {
+    token,
+    json: {
+      overallRating: 3.5,
+      aromaRating: 3.5,
+      acidityRating: 3.0,
+      sweetnessRating: 3.5,
+      bitternessRating: 2.0,
+      bodyRating: 3.0,
+      aftertasteRating: 3.5,
+      content: `${smokePrefix} review create second`,
+    },
+  })
+
+  state.secondReviewId = secondCreateBody.data?.id
+  assert(
+    Number.isInteger(state.secondReviewId) && state.secondReviewId > 0,
+    'Second review create did not return id'
+  )
+  await assertCoffeeAggregates(token, { reviewCount: 2, overallRating: 4.0 }, 'after second review create')
 
   await requestApi('GET', `/api/reviews/${state.reviewId}`, { token })
 
@@ -231,8 +257,19 @@ async function smokeReview(token) {
     },
   })
   assert(updateBody.data === true, 'Review update did not return true')
+  await assertCoffeeAggregates(token, { reviewCount: 2, overallRating: 3.8 }, 'after review update')
 
-  state.checks.push(`Review list/create/detail/update: ok (id=${state.reviewId})`)
+  const deleteSecondBody = await requestApi('DELETE', `/api/reviews/${state.secondReviewId}`, { token })
+  state.deleted.secondReview = deleteSecondBody.data === true
+  assert(state.deleted.secondReview, 'Second review delete did not return true')
+  await assertCoffeeAggregates(token, { reviewCount: 1, overallRating: 4.0 }, 'after second review delete')
+
+  const deleteBody = await requestApi('DELETE', `/api/reviews/${state.reviewId}`, { token })
+  state.deleted.review = deleteBody.data === true
+  assert(state.deleted.review, 'Review delete did not return true')
+  await assertCoffeeAggregates(token, { reviewCount: 0, overallRating: null }, 'after all reviews delete')
+
+  state.checks.push(`Review list/create/detail/update/delete/aggregates: ok (ids=${state.reviewId}, ${state.secondReviewId})`)
 }
 
 async function smokeBrew(token) {
@@ -260,6 +297,27 @@ async function smokeBrew(token) {
 
   state.brewId = createBody.data?.id
   assert(Number.isInteger(state.brewId) && state.brewId > 0, 'Brew create did not return id')
+  await assertCoffeeAggregates(token, { brewCount: 1 }, 'after first brew create')
+
+  const secondCreateBody = await requestApi('POST', `/api/coffee-beans/${state.coffeeId}/brew-records`, {
+    token,
+    json: {
+      brewMethod: 'French Press',
+      beanAmountGrams: 18,
+      waterAmountMl: 270,
+      ratio: '1:15',
+      waterTemperature: 91,
+      grindSize: 'coarse',
+      brewTimeSeconds: 240,
+      resultSummary: 'round',
+      resultNotes: `${smokePrefix} brew create second`,
+      isRecommended: true,
+    },
+  })
+
+  state.secondBrewId = secondCreateBody.data?.id
+  assert(Number.isInteger(state.secondBrewId) && state.secondBrewId > 0, 'Second brew create did not return id')
+  await assertCoffeeAggregates(token, { brewCount: 2 }, 'after second brew create')
 
   await requestApi('GET', `/api/brew-records/${state.brewId}`, { token })
 
@@ -279,8 +337,19 @@ async function smokeBrew(token) {
     },
   })
   assert(updateBody.data === true, 'Brew update did not return true')
+  await assertCoffeeAggregates(token, { brewCount: 2 }, 'after brew update')
 
-  state.checks.push(`Brew list/create/detail/update: ok (id=${state.brewId})`)
+  const deleteSecondBody = await requestApi('DELETE', `/api/brew-records/${state.secondBrewId}`, { token })
+  state.deleted.secondBrew = deleteSecondBody.data === true
+  assert(state.deleted.secondBrew, 'Second brew delete did not return true')
+  await assertCoffeeAggregates(token, { brewCount: 1 }, 'after second brew delete')
+
+  const deleteBody = await requestApi('DELETE', `/api/brew-records/${state.brewId}`, { token })
+  state.deleted.brew = deleteBody.data === true
+  assert(state.deleted.brew, 'Brew delete did not return true')
+  await assertCoffeeAggregates(token, { brewCount: 0 }, 'after all brew records delete')
+
+  state.checks.push(`Brew list/create/detail/update/delete/aggregates: ok (ids=${state.brewId}, ${state.secondBrewId})`)
 }
 
 async function cleanup(token) {
@@ -301,12 +370,30 @@ async function cleanup(token) {
     }
   }
 
+  if (state.secondReviewId && !state.deleted.secondReview) {
+    try {
+      const body = await requestApi('DELETE', `/api/reviews/${state.secondReviewId}`, { token })
+      state.deleted.secondReview = body.data === true
+    } catch (error) {
+      state.warnings.push(`Second review cleanup failed: ${error.message}`)
+    }
+  }
+
   if (state.brewId && !state.deleted.brew) {
     try {
       const body = await requestApi('DELETE', `/api/brew-records/${state.brewId}`, { token })
       state.deleted.brew = body.data === true
     } catch (error) {
       state.warnings.push(`Brew cleanup failed: ${error.message}`)
+    }
+  }
+
+  if (state.secondBrewId && !state.deleted.secondBrew) {
+    try {
+      const body = await requestApi('DELETE', `/api/brew-records/${state.secondBrewId}`, { token })
+      state.deleted.secondBrew = body.data === true
+    } catch (error) {
+      state.warnings.push(`Second brew cleanup failed: ${error.message}`)
     }
   }
 
@@ -318,6 +405,40 @@ async function cleanup(token) {
       state.warnings.push(`Coffee cleanup failed: ${error.message}`)
     }
   }
+}
+
+async function assertCoffeeAggregates(token, expected, label) {
+  const detailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
+  assertAggregateFields(detailBody.data, expected, `Coffee detail aggregates ${label}`)
+
+  const listBody = await requestApi('GET', '/api/coffee-beans?page=1&pageSize=50', { token })
+  const item = listBody.data?.items?.find((coffeeBean) => coffeeBean.id === state.coffeeId)
+  assert(item, `Coffee list did not include smoke bean ${label}`)
+  assertAggregateFields(item, expected, `Coffee list aggregates ${label}`)
+}
+
+function assertAggregateFields(source, expected, label) {
+  if (Object.prototype.hasOwnProperty.call(expected, 'reviewCount')) {
+    assertNumberEquals(source?.reviewCount, expected.reviewCount, `${label}: reviewCount`)
+  }
+  if (Object.prototype.hasOwnProperty.call(expected, 'overallRating')) {
+    if (expected.overallRating === null) {
+      assert(source?.overallRating === null, `${label}: overallRating expected null, got ${source?.overallRating}`)
+    } else {
+      assertNumberEquals(source?.overallRating, expected.overallRating, `${label}: overallRating`)
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(expected, 'brewCount')) {
+    assertNumberEquals(source?.brewCount, expected.brewCount, `${label}: brewCount`)
+  }
+}
+
+function assertNumberEquals(actual, expected, label) {
+  const actualNumber = Number(actual)
+  assert(
+    Number.isFinite(actualNumber) && Math.abs(actualNumber - expected) < 0.0001,
+    `${label} expected ${expected}, got ${actual}`
+  )
 }
 
 async function requestApi(method, path, options = {}) {
@@ -401,13 +522,17 @@ function printSummary(status, error) {
   console.log('Created test data:')
   console.log(`- Coffee bean id: ${state.coffeeId ?? 'not created'}`)
   console.log(`- Review id: ${state.reviewId ?? 'not created'}`)
+  console.log(`- Second review id: ${state.secondReviewId ?? 'not created'}`)
   console.log(`- Brew record id: ${state.brewId ?? 'not created'}`)
+  console.log(`- Second brew record id: ${state.secondBrewId ?? 'not created'}`)
   console.log(`- Cover url: ${state.coverUrl ?? 'not uploaded'}`)
   console.log('')
   console.log('Delete calls executed:')
   console.log(`- Coffee bean delete: ${state.deleted.coffee ? 'yes' : 'no'}`)
   console.log(`- Review delete: ${state.deleted.review ? 'yes' : 'no'}`)
+  console.log(`- Second review delete: ${state.deleted.secondReview ? 'yes' : 'no'}`)
   console.log(`- Brew record delete: ${state.deleted.brew ? 'yes' : 'no'}`)
+  console.log(`- Second brew record delete: ${state.deleted.secondBrew ? 'yes' : 'no'}`)
   console.log('')
   console.log('Side effects:')
   console.log('- Delete endpoints are logical deletes; smoke records may remain in MySQL with deleted=1.')
