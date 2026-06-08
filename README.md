@@ -495,6 +495,18 @@ SMOKE_TEST_RESULT: PASS
 - 文件上传会落盘，烟测会在本地 uploads 目录留下测试上传文件。
 - 脚本只用于本地开发 / v0.2 回归检查，不扩展为完整自动化测试体系。
 
+### 本地 smoke 残留清理
+
+本地清理脚本位于：
+
+```powershell
+node scripts\clean-smoke-data.mjs
+node scripts\clean-smoke-data.mjs --dry-run
+node scripts\clean-smoke-data.mjs --execute
+```
+
+默认和 `--dry-run` 都只预览，不删除；只有 `--execute` 会物理清理明确带 `[SMOKE_TEST]` 的 coffee 记录、其关联 `coffee_reviews` / `brew_records`，以及这些 smoke coffee 数据库记录明确引用的上传封面文件。执行前请先 dry-run，详细说明见 `docs/v0.3-clean-smoke-data.md`。
+
 ## 默认登录账号
 
 MVP 当前仍采用临时默认账号：
