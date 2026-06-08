@@ -20,6 +20,7 @@ const state = {
   brewId: null,
   secondBrewId: null,
   coverUrl: null,
+  drinkStatusSamples: [],
   deleted: {
     coffee: false,
     review: false,
@@ -49,6 +50,7 @@ async function main() {
 
   const token = await login()
   await smokeCoffee(token)
+  await smokeDrinkStatusFilters(token)
   await smokeFileUpload(token)
   await smokeReview(token)
   await smokeBrew(token)
@@ -145,6 +147,113 @@ async function smokeCoffee(token) {
   assert(updateBody.data === true, 'Coffee update did not return true')
 
   state.checks.push(`Coffee list/create/detail/update: ok (id=${state.coffeeId})`)
+}
+
+async function smokeDrinkStatusFilters(token) {
+  const origin = `${smokePrefix} Drink Status Origin`
+  const samples = [
+    {
+      status: 'NO_DATE',
+      name: `${smokePrefix} NO_DATE Coffee Bean`,
+      roastLevel: 'Smoke No Date Roast',
+      processMethod: 'Smoke No Date Process',
+      bestFromDate: null,
+      bestToDate: null,
+    },
+    {
+      status: 'RESTING',
+      name: `${smokePrefix} RESTING Coffee Bean`,
+      roastLevel: 'Smoke Resting Roast',
+      processMethod: 'Smoke Resting Process',
+      bestFromDate: localDateOffset(5),
+      bestToDate: localDateOffset(20),
+    },
+    {
+      status: 'READY',
+      name: `${smokePrefix} READY Coffee Bean`,
+      roastLevel: 'Smoke Ready Roast',
+      processMethod: 'Smoke Ready Process',
+      bestFromDate: localDateOffset(-14),
+      bestToDate: localDateOffset(14),
+    },
+    {
+      status: 'EXPIRING_SOON',
+      name: `${smokePrefix} EXPIRING_SOON Coffee Bean`,
+      roastLevel: 'Smoke Expiring Soon Roast',
+      processMethod: 'Smoke Expiring Soon Process',
+      bestFromDate: localDateOffset(-14),
+      bestToDate: localDateOffset(5),
+    },
+    {
+      status: 'EXPIRED',
+      name: `${smokePrefix} EXPIRED Coffee Bean`,
+      roastLevel: 'Smoke Expired Roast',
+      processMethod: 'Smoke Expired Process',
+      bestFromDate: localDateOffset(-30),
+      bestToDate: localDateOffset(-5),
+    },
+  ]
+
+  for (const sample of samples) {
+    const createBody = await requestApi('POST', '/api/coffee-beans', {
+      token,
+      json: {
+        name: sample.name,
+        origin,
+        region: 'Drink Status Smoke',
+        farm: 'Smoke Farm',
+        variety: 'Smoke Variety',
+        processMethod: sample.processMethod,
+        roastLevel: sample.roastLevel,
+        roaster: 'Smoke Drink Status Roaster',
+        roastDate: localDateOffset(-35),
+        bestFromDate: sample.bestFromDate,
+        bestToDate: sample.bestToDate,
+        purchaseDate: localDateOffset(-36),
+        openDate: null,
+        finishDate: null,
+        netWeightGrams: 100,
+        price: 10,
+        currency: 'CNY',
+        status: 'UNOPENED',
+        coverImageUrl: null,
+        notes: `${smokePrefix} drink status ${sample.status}`,
+      },
+    })
+
+    const id = createBody.data?.id
+    assert(Number.isInteger(id) && id > 0, `${sample.status} coffee create did not return id`)
+    state.drinkStatusSamples.push({ ...sample, id, origin, deleted: false })
+  }
+
+  for (const sample of state.drinkStatusSamples) {
+    const query = buildQueryString({
+      page: 1,
+      pageSize: 10,
+      origin,
+      drinkStatus: sample.status,
+    })
+    const page = await requestApi('GET', `/api/coffee-beans?${query}`, { token })
+    assertDrinkStatusPage(page, sample, state.drinkStatusSamples, `${sample.status} drinkStatus`)
+  }
+
+  const readySample = state.drinkStatusSamples.find((sample) => sample.status === 'READY')
+  assert(readySample, 'READY smoke sample was not created')
+  const combinedQuery = buildQueryString({
+    page: 1,
+    pageSize: 10,
+    origin,
+    roastLevel: readySample.roastLevel,
+    processMethod: readySample.processMethod,
+    drinkStatus: readySample.status,
+  })
+  const combinedPage = await requestApi('GET', `/api/coffee-beans?${combinedQuery}`, { token })
+  assertDrinkStatusPage(combinedPage, readySample, state.drinkStatusSamples, 'Combined READY filters')
+
+  const summary = state.drinkStatusSamples
+    .map((sample) => `${sample.status}=${sample.id}`)
+    .join(', ')
+  state.checks.push(`Coffee drinkStatus filters/combined filters: ok (${summary})`)
 }
 
 async function smokeFileUpload(token) {
@@ -397,6 +506,17 @@ async function cleanup(token) {
     }
   }
 
+  for (const sample of state.drinkStatusSamples) {
+    if (sample.id && !sample.deleted) {
+      try {
+        const body = await requestApi('DELETE', `/api/coffee-beans/${sample.id}`, { token })
+        sample.deleted = body.data === true
+      } catch (error) {
+        state.warnings.push(`${sample.status} coffee cleanup failed: ${error.message}`)
+      }
+    }
+  }
+
   if (state.coffeeId && !state.deleted.coffee) {
     try {
       const body = await requestApi('DELETE', `/api/coffee-beans/${state.coffeeId}`, { token })
@@ -415,6 +535,22 @@ async function assertCoffeeAggregates(token, expected, label) {
   const item = listBody.data?.items?.find((coffeeBean) => coffeeBean.id === state.coffeeId)
   assert(item, `Coffee list did not include smoke bean ${label}`)
   assertAggregateFields(item, expected, `Coffee list aggregates ${label}`)
+}
+
+function assertDrinkStatusPage(page, expectedSample, allSamples, label) {
+  const items = page.data?.items
+  assert(Array.isArray(items), `${label}: Coffee list did not return items`)
+
+  const ids = items.map((coffeeBean) => coffeeBean.id)
+  assert(ids.includes(expectedSample.id), `${label}: expected sample was not returned`)
+
+  for (const sample of allSamples) {
+    if (sample.id !== expectedSample.id) {
+      assert(!ids.includes(sample.id), `${label}: included ${sample.status} sample unexpectedly`)
+    }
+  }
+
+  assertNumberEquals(page.data?.total, 1, `${label}: total`)
 }
 
 function assertAggregateFields(source, expected, label) {
@@ -439,6 +575,24 @@ function assertNumberEquals(actual, expected, label) {
     Number.isFinite(actualNumber) && Math.abs(actualNumber - expected) < 0.0001,
     `${label} expected ${expected}, got ${actual}`
   )
+}
+
+function formatDrinkStatusSampleIds() {
+  if (state.drinkStatusSamples.length === 0) {
+    return 'not created'
+  }
+
+  return state.drinkStatusSamples
+    .map((sample) => `${sample.status}=${sample.id}`)
+    .join(', ')
+}
+
+function formatDrinkStatusSampleDeletes() {
+  if (state.drinkStatusSamples.length === 0) {
+    return 'no samples'
+  }
+
+  return state.drinkStatusSamples.every((sample) => sample.deleted) ? 'yes' : 'partial/no'
 }
 
 async function requestApi(method, path, options = {}) {
@@ -525,6 +679,7 @@ function printSummary(status, error) {
   console.log(`- Second review id: ${state.secondReviewId ?? 'not created'}`)
   console.log(`- Brew record id: ${state.brewId ?? 'not created'}`)
   console.log(`- Second brew record id: ${state.secondBrewId ?? 'not created'}`)
+  console.log(`- Drink status coffee ids: ${formatDrinkStatusSampleIds()}`)
   console.log(`- Cover url: ${state.coverUrl ?? 'not uploaded'}`)
   console.log('')
   console.log('Delete calls executed:')
@@ -533,6 +688,7 @@ function printSummary(status, error) {
   console.log(`- Second review delete: ${state.deleted.secondReview ? 'yes' : 'no'}`)
   console.log(`- Brew record delete: ${state.deleted.brew ? 'yes' : 'no'}`)
   console.log(`- Second brew record delete: ${state.deleted.secondBrew ? 'yes' : 'no'}`)
+  console.log(`- Drink status coffee delete: ${formatDrinkStatusSampleDeletes()}`)
   console.log('')
   console.log('Side effects:')
   console.log('- Delete endpoints are logical deletes; smoke records may remain in MySQL with deleted=1.')
@@ -597,6 +753,30 @@ function normalizeBaseUrl(value) {
 
 function joinUrl(baseUrl, path) {
   return `${normalizeBaseUrl(baseUrl)}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+function buildQueryString(params) {
+  const searchParams = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== '' && value !== null && value !== undefined) {
+      searchParams.set(key, String(value))
+    }
+  })
+  return searchParams.toString()
+}
+
+function localDateOffset(days) {
+  const today = new Date()
+  const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days)
+  return formatLocalDate(date)
+}
+
+function formatLocalDate(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 function assert(condition, message) {

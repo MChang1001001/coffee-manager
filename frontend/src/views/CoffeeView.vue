@@ -83,6 +83,7 @@ interface BrewForm {
 
 type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
 type CoffeeRouteAction = 'edit' | 'review' | 'brew'
+type DrinkStatusFilter = '' | 'NO_DATE' | 'RESTING' | 'READY' | 'EXPIRING_SOON' | 'EXPIRED'
 
 const defaultForm: CoffeeBeanForm = {
   name: '',
@@ -143,6 +144,15 @@ const reviewRatingFields: Array<{ key: RatingFieldKey; label: string; required?:
 
 const reviewDimensionFields = reviewRatingFields.filter((field) => field.key !== 'overallRating')
 
+const drinkStatusOptions: Array<{ value: DrinkStatusFilter; label: string }> = [
+  { value: '', label: '全部状态' },
+  { value: 'NO_DATE', label: '未填写日期' },
+  { value: 'RESTING', label: '养豆中' },
+  { value: 'READY', label: '赏味期中' },
+  { value: 'EXPIRING_SOON', label: '即将过赏味期' },
+  { value: 'EXPIRED', label: '已过赏味期' },
+]
+
 const route = useRoute()
 const router = useRouter()
 const currentUser = ref<UserProfile | null>(null)
@@ -192,6 +202,7 @@ const filters = reactive({
   roastLevel: '',
   processMethod: '',
   origin: '',
+  drinkStatus: '' as DrinkStatusFilter,
   page: 1,
   pageSize: 20,
 })
@@ -252,7 +263,7 @@ const openedBeanCount = computed(
 const coverBeanCount = computed(() => beans.value.filter((bean) => bean.coverImageUrl).length)
 const activeFilterCount = computed(
   () =>
-    [filters.keyword, filters.roastLevel, filters.processMethod, filters.origin].filter(
+    [filters.keyword, filters.roastLevel, filters.processMethod, filters.origin, filters.drinkStatus].filter(
       (value) => value.trim() !== '',
     ).length,
 )
@@ -392,6 +403,7 @@ function buildQuery(): CoffeeBeanQuery {
     roastLevel: emptyToUndefined(filters.roastLevel),
     processMethod: emptyToUndefined(filters.processMethod),
     origin: emptyToUndefined(filters.origin),
+    drinkStatus: emptyToUndefined(filters.drinkStatus),
     page: filters.page,
     pageSize: filters.pageSize,
   }
@@ -409,6 +421,7 @@ function resetFilters() {
   filters.roastLevel = ''
   filters.processMethod = ''
   filters.origin = ''
+  filters.drinkStatus = ''
   filters.page = 1
   filters.pageSize = 20
   void fetchBeans()
@@ -1654,6 +1667,15 @@ function joinParts(...parts: Array<string | null | undefined>) {
         <label class="field">
           <span>产地</span>
           <input v-model="filters.origin" type="text" placeholder="Ethiopia" />
+        </label>
+
+        <label class="field">
+          <span>饮用状态</span>
+          <select v-model="filters.drinkStatus" @change="applyFilters">
+            <option v-for="option in drinkStatusOptions" :key="option.value || 'ALL'" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </label>
 
         <div class="filter-actions">

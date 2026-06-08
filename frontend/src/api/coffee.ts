@@ -13,6 +13,7 @@ export interface CoffeeBeanQuery {
   roastLevel?: string
   processMethod?: string
   origin?: string
+  drinkStatus?: string
   page: number
   pageSize: number
 }

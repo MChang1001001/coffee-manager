@@ -164,9 +164,44 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
             wrapper.eq(CoffeeBean::getOrigin, origin);
         }
 
+        applyDrinkStatus(wrapper, CoffeeDrinkStatus.fromQueryValue(query.getDrinkStatus()));
+
         return wrapper
                 .orderByDesc(CoffeeBean::getCreatedAt)
                 .orderByDesc(CoffeeBean::getId);
+    }
+
+    private void applyDrinkStatus(LambdaQueryWrapper<CoffeeBean> wrapper, CoffeeDrinkStatus drinkStatus) {
+        if (drinkStatus == null) {
+            return;
+        }
+
+        switch (drinkStatus) {
+            case NO_DATE -> wrapper.and(statusWrapper -> statusWrapper
+                    .isNull(CoffeeBean::getBestFromDate)
+                    .or()
+                    .isNull(CoffeeBean::getBestToDate));
+            case RESTING -> wrapper
+                    .isNotNull(CoffeeBean::getBestFromDate)
+                    .isNotNull(CoffeeBean::getBestToDate)
+                    .apply("CURRENT_DATE < best_from_date");
+            case EXPIRED -> wrapper
+                    .isNotNull(CoffeeBean::getBestFromDate)
+                    .isNotNull(CoffeeBean::getBestToDate)
+                    .apply("CURRENT_DATE > best_to_date");
+            case EXPIRING_SOON -> wrapper
+                    .isNotNull(CoffeeBean::getBestFromDate)
+                    .isNotNull(CoffeeBean::getBestToDate)
+                    .apply("CURRENT_DATE >= best_from_date")
+                    .apply("CURRENT_DATE <= best_to_date")
+                    .apply("DATEDIFF(best_to_date, CURRENT_DATE) <= 7");
+            case READY -> wrapper
+                    .isNotNull(CoffeeBean::getBestFromDate)
+                    .isNotNull(CoffeeBean::getBestToDate)
+                    .apply("CURRENT_DATE >= best_from_date")
+                    .apply("CURRENT_DATE <= best_to_date")
+                    .apply("DATEDIFF(best_to_date, CURRENT_DATE) > 7");
+        }
     }
 
     private CoffeeBean findOwnedBean(Long userId, Long id) {

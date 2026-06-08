@@ -258,7 +258,7 @@ td span {
 
 .filter-form {
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+  grid-template-columns: repeat(5, minmax(140px, 1fr)) auto;
   gap: 14px;
   align-items: end;
 }
@@ -991,7 +991,7 @@ h2 {
 }
 
 .filter-form {
-  grid-template-columns: 1.45fr repeat(3, minmax(130px, 1fr)) auto;
+  grid-template-columns: 1.45fr repeat(4, minmax(120px, 1fr)) auto;
 }
 
 input,

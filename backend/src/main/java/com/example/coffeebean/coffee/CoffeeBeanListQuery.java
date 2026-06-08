@@ -20,6 +20,9 @@ public class CoffeeBeanListQuery {
     @Size(max = 128, message = "产地不能超过128个字符")
     private String origin;
 
+    @Size(max = 32, message = "饮用状态不能超过32个字符")
+    private String drinkStatus;
+
     @Min(value = 1, message = "页码必须大于等于1")
     private Long page = 1L;
 
