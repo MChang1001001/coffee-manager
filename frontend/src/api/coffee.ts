@@ -23,6 +23,7 @@ export interface CoffeeBeanListItem {
   name: string
   origin: string | null
   region: string | null
+  variety: string | null
   processMethod: string | null
   roastLevel: string | null
   roaster: string | null
@@ -74,7 +75,27 @@ export interface CoffeeBeanIdResponse {
   id: number
 }
 
+export interface CoffeeEnumOption {
+  label: string
+  value: string
+}
+
+export interface CoffeeEnumOptions {
+  roastLevels: CoffeeEnumOption[]
+  processMethods: CoffeeEnumOption[]
+  origins: CoffeeEnumOption[]
+  varieties: CoffeeEnumOption[]
+}
+
 const coffeeBeanPath = '/coffee-beans'
+const coffeeEnumsPath = '/enums/coffee'
+
+export function getCoffeeEnums() {
+  return request<CoffeeEnumOptions>({
+    url: coffeeEnumsPath,
+    method: 'GET',
+  })
+}
 
 export function listCoffeeBeans(query: CoffeeBeanQuery) {
   return request<PageResponse<CoffeeBeanListItem>>({

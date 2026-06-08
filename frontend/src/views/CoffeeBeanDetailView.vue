@@ -12,6 +12,15 @@ import type { CoffeeReview } from '../api/review'
 
 type CoffeeAction = 'edit' | 'review' | 'brew'
 
+const roastLevelLabels: Record<string, string> = {
+  LIGHT: '浅烘',
+  MEDIUM_LIGHT: '中浅烘',
+  MEDIUM: '中烘',
+  MEDIUM_DARK: '中深烘',
+  DARK: '深烘',
+  UNKNOWN: '未知',
+}
+
 const route = useRoute()
 
 const bean = ref<CoffeeBeanDetail | null>(null)
@@ -214,6 +223,16 @@ function isCurrentBrewSummaryFetch(beanId: number, fetchVersion: number) {
 
 function display(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '-' : value
+}
+
+function roastLevelLabel(value: string | null | undefined) {
+  const normalized = value?.trim()
+
+  if (!normalized) {
+    return '-'
+  }
+
+  return roastLevelLabels[normalized] ?? normalized
 }
 
 function dateDisplay(value: string | null | undefined) {
@@ -438,8 +457,12 @@ function joinParts(...parts: Array<string | null | undefined>) {
               <dd>{{ originLine }}</dd>
             </div>
             <div>
+              <dt>品种</dt>
+              <dd>{{ display(bean.variety) }}</dd>
+            </div>
+            <div>
               <dt>烘焙度</dt>
-              <dd>{{ display(bean.roastLevel) }}</dd>
+              <dd>{{ roastLevelLabel(bean.roastLevel) }}</dd>
             </div>
             <div>
               <dt>处理法</dt>

@@ -17,6 +17,8 @@ public class CoffeeBeanListItemResponse {
 
     private String region;
 
+    private String variety;
+
     private String processMethod;
 
     private String roastLevel;

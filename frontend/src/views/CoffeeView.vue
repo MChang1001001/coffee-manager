@@ -13,6 +13,7 @@ import {
   createCoffeeBean,
   deleteCoffeeBean,
   getCoffeeBean,
+  getCoffeeEnums,
   listCoffeeBeans,
   updateCoffeeBean,
 } from '../api/coffee'
@@ -28,6 +29,8 @@ import type {
   CoffeeBeanListItem,
   CoffeeBeanPayload,
   CoffeeBeanQuery,
+  CoffeeEnumOption,
+  CoffeeEnumOptions,
   PageResponse,
 } from '../api/coffee'
 import type { BrewRecord, BrewRecordPayload } from '../api/brew'
@@ -153,10 +156,61 @@ const drinkStatusOptions: Array<{ value: DrinkStatusFilter; label: string }> = [
   { value: 'EXPIRED', label: '已过赏味期' },
 ]
 
+const coffeeEnumFallback: CoffeeEnumOptions = {
+  roastLevels: [
+    { label: '浅烘', value: 'LIGHT' },
+    { label: '中浅烘', value: 'MEDIUM_LIGHT' },
+    { label: '中烘', value: 'MEDIUM' },
+    { label: '中深烘', value: 'MEDIUM_DARK' },
+    { label: '深烘', value: 'DARK' },
+    { label: '未知', value: 'UNKNOWN' },
+  ],
+  processMethods: [
+    { label: '水洗', value: '水洗' },
+    { label: '日晒', value: '日晒' },
+    { label: '蜜处理', value: '蜜处理' },
+    { label: '厌氧发酵', value: '厌氧发酵' },
+    { label: '厌氧日晒', value: '厌氧日晒' },
+    { label: '厌氧水洗', value: '厌氧水洗' },
+    { label: '湿刨法', value: '湿刨法' },
+    { label: '半水洗', value: '半水洗' },
+    { label: '酒桶发酵', value: '酒桶发酵' },
+    { label: '实验处理', value: '实验处理' },
+    { label: '未知', value: '未知' },
+  ],
+  origins: [
+    { label: '埃塞俄比亚', value: '埃塞俄比亚' },
+    { label: '哥伦比亚', value: '哥伦比亚' },
+    { label: '巴拿马', value: '巴拿马' },
+    { label: '肯尼亚', value: '肯尼亚' },
+    { label: '危地马拉', value: '危地马拉' },
+    { label: '哥斯达黎加', value: '哥斯达黎加' },
+    { label: '巴西', value: '巴西' },
+    { label: '印尼', value: '印尼' },
+    { label: '云南', value: '云南' },
+  ],
+  varieties: [
+    { label: '阿拉比卡', value: '阿拉比卡' },
+    { label: '罗布斯塔', value: '罗布斯塔' },
+    { label: '瑰夏', value: '瑰夏' },
+    { label: '波旁', value: '波旁' },
+    { label: '铁皮卡', value: '铁皮卡' },
+    { label: '卡杜拉', value: '卡杜拉' },
+    { label: '卡杜艾', value: '卡杜艾' },
+    { label: 'SL28', value: 'SL28' },
+    { label: 'SL34', value: 'SL34' },
+    { label: '帕卡马拉', value: '帕卡马拉' },
+    { label: '卡蒂姆', value: '卡蒂姆' },
+    { label: '混合豆', value: '混合豆' },
+    { label: '未知', value: '未知' },
+  ],
+}
+
 const route = useRoute()
 const router = useRouter()
 const currentUser = ref<UserProfile | null>(null)
 const beans = ref<CoffeeBeanListItem[]>([])
+const coffeeEnums = ref<CoffeeEnumOptions>(coffeeEnumFallback)
 const loading = ref(false)
 const saving = ref(false)
 const coverUploading = ref(false)
@@ -340,6 +394,12 @@ const canBrewGoPrevious = computed(() => brewQuery.page > 1 && !brewLoading.valu
 const canBrewGoNext = computed(
   () => brewQuery.page < effectiveBrewTotalPages.value && !brewLoading.value,
 )
+const roastLevelOptions = computed(() => coffeeEnums.value.roastLevels)
+const processMethodOptions = computed(() => coffeeEnums.value.processMethods)
+const originOptions = computed(() => coffeeEnums.value.origins)
+const varietyOptions = computed(() => coffeeEnums.value.varieties)
+const formRoastLevelOptions = computed(() => withCurrentOption(roastLevelOptions.value, form.roastLevel))
+const filterRoastLevelOptions = computed(() => withCurrentOption(roastLevelOptions.value, filters.roastLevel))
 
 onMounted(() => {
   void bootPage()
@@ -364,8 +424,18 @@ async function bootPage() {
     return
   }
 
+  await fetchCoffeeEnums()
   await fetchBeans()
   await handleRouteBeanAction()
+}
+
+async function fetchCoffeeEnums() {
+  try {
+    coffeeEnums.value = mergeCoffeeEnums(await getCoffeeEnums())
+  } catch (caughtError) {
+    console.warn('Coffee enum options fallback is in use.', caughtError)
+    coffeeEnums.value = coffeeEnumFallback
+  }
 }
 
 async function fetchBeans() {
@@ -506,6 +576,7 @@ function detailToListItem(detail: CoffeeBeanDetail): CoffeeBeanListItem {
     name: detail.name,
     origin: detail.origin,
     region: detail.region,
+    variety: detail.variety,
     processMethod: detail.processMethod,
     roastLevel: detail.roastLevel,
     roaster: detail.roaster,
@@ -1486,11 +1557,48 @@ function statusClass(value: string | null | undefined) {
 }
 
 function beanOriginLine(bean: CoffeeBeanListItem) {
-  return joinParts(bean.origin, bean.region) || '未记录产地'
+  return joinParts(bean.origin, bean.region, bean.variety ? `品种 ${bean.variety}` : null) || '未记录产地'
 }
 
 function beanRoastLine(bean: CoffeeBeanListItem) {
   return joinParts(bean.roaster, bean.roastDate) || '未记录烘焙信息'
+}
+
+function roastLevelLabel(value: string | null | undefined) {
+  return optionLabel(roastLevelOptions.value, value)
+}
+
+function optionLabel(options: CoffeeEnumOption[], value: string | null | undefined) {
+  const normalized = value?.trim()
+
+  if (!normalized) {
+    return '-'
+  }
+
+  return options.find((option) => option.value === normalized)?.label ?? normalized
+}
+
+function withCurrentOption(options: CoffeeEnumOption[], currentValue: string) {
+  const normalized = currentValue.trim()
+
+  if (!normalized || options.some((option) => option.value === normalized)) {
+    return options
+  }
+
+  return [...options, { label: `自定义：${normalized}`, value: normalized }]
+}
+
+function mergeCoffeeEnums(options: CoffeeEnumOptions): CoffeeEnumOptions {
+  return {
+    roastLevels: sanitizeOptionList(options.roastLevels, coffeeEnumFallback.roastLevels),
+    processMethods: sanitizeOptionList(options.processMethods, coffeeEnumFallback.processMethods),
+    origins: sanitizeOptionList(options.origins, coffeeEnumFallback.origins),
+    varieties: sanitizeOptionList(options.varieties, coffeeEnumFallback.varieties),
+  }
+}
+
+function sanitizeOptionList(options: CoffeeEnumOption[] | undefined, fallback: CoffeeEnumOption[]) {
+  return Array.isArray(options) && options.length > 0 ? options : fallback
 }
 
 function joinParts(...parts: Array<string | null | undefined>) {
@@ -1500,6 +1608,22 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
 <template>
   <main class="coffee-page">
+    <datalist id="coffee-origin-options">
+      <option v-for="option in originOptions" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </datalist>
+    <datalist id="coffee-process-method-options">
+      <option v-for="option in processMethodOptions" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </datalist>
+    <datalist id="coffee-variety-options">
+      <option v-for="option in varietyOptions" :key="option.value" :value="option.value">
+        {{ option.label }}
+      </option>
+    </datalist>
+
     <section class="notebook-hero" aria-labelledby="coffee-page-title">
       <div class="hero-copy">
         <p class="eyebrow">Coffee Manager</p>
@@ -1533,7 +1657,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
             <dl class="featured-meta">
               <div>
                 <dt>烘焙度</dt>
-                <dd>{{ display(featuredBean.roastLevel) }}</dd>
+                <dd>{{ roastLevelLabel(featuredBean.roastLevel) }}</dd>
               </div>
               <div>
                 <dt>处理法</dt>
@@ -1656,17 +1780,27 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
         <label class="field">
           <span>烘焙度</span>
-          <input v-model="filters.roastLevel" type="text" placeholder="LIGHT / MEDIUM" />
+          <select v-model="filters.roastLevel" :disabled="loading" @change="applyFilters">
+            <option value="">全部烘焙度</option>
+            <option v-for="option in filterRoastLevelOptions" :key="option.value" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
         </label>
 
         <label class="field">
           <span>处理法</span>
-          <input v-model="filters.processMethod" type="text" placeholder="WASHED / NATURAL" />
+          <input
+            v-model="filters.processMethod"
+            type="text"
+            list="coffee-process-method-options"
+            placeholder="水洗 / 日晒"
+          />
         </label>
 
         <label class="field">
           <span>产地</span>
-          <input v-model="filters.origin" type="text" placeholder="Ethiopia" />
+          <input v-model="filters.origin" type="text" list="coffee-origin-options" placeholder="埃塞俄比亚" />
         </label>
 
         <label class="field">
@@ -1769,7 +1903,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
           <div class="archive-cell">
             <span class="cell-label">烘焙度</span>
-            <strong>{{ display(bean.roastLevel) }}</strong>
+            <strong>{{ roastLevelLabel(bean.roastLevel) }}</strong>
             <small>烘焙 {{ dateDisplay(bean.roastDate) }}</small>
           </div>
 
@@ -1880,7 +2014,13 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
           <label class="field">
             <span>产地</span>
-            <input v-model.trim="form.origin" type="text" maxlength="128" />
+            <input
+              v-model.trim="form.origin"
+              type="text"
+              maxlength="128"
+              list="coffee-origin-options"
+              placeholder="可输入自定义产地"
+            />
           </label>
 
           <label class="field">
@@ -1895,17 +2035,34 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
           <label class="field">
             <span>品种</span>
-            <input v-model.trim="form.variety" type="text" maxlength="128" />
+            <input
+              v-model.trim="form.variety"
+              type="text"
+              maxlength="128"
+              list="coffee-variety-options"
+              placeholder="可输入自定义豆种"
+            />
           </label>
 
           <label class="field">
             <span>处理法</span>
-            <input v-model.trim="form.processMethod" type="text" maxlength="64" />
+            <input
+              v-model.trim="form.processMethod"
+              type="text"
+              maxlength="64"
+              list="coffee-process-method-options"
+              placeholder="可输入自定义处理法"
+            />
           </label>
 
           <label class="field">
             <span>烘焙度</span>
-            <input v-model.trim="form.roastLevel" type="text" maxlength="64" />
+            <select v-model="form.roastLevel">
+              <option value="">未选择</option>
+              <option v-for="option in formRoastLevelOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
           </label>
 
           <label class="field">

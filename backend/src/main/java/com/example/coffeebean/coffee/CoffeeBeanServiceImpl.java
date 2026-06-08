@@ -286,6 +286,7 @@ public class CoffeeBeanServiceImpl extends ServiceImpl<CoffeeBeanMapper, CoffeeB
         response.setName(coffeeBean.getName());
         response.setOrigin(coffeeBean.getOrigin());
         response.setRegion(coffeeBean.getRegion());
+        response.setVariety(coffeeBean.getVariety());
         response.setProcessMethod(coffeeBean.getProcessMethod());
         response.setRoastLevel(coffeeBean.getRoastLevel());
         response.setRoaster(coffeeBean.getRoaster());

@@ -209,6 +209,13 @@ ALTER TABLE coffee_beans
   ADD COLUMN best_to_date date null comment '赏味结束日期';
 ```
 
+如果本地旧版 `coffee_beans` 表还没有 v3 豆种字段，手动补充：
+
+```sql
+ALTER TABLE coffee_beans
+  ADD COLUMN variety varchar(128) null comment '品种' AFTER farm;
+```
+
 如果 `mysql` 命令没有加入 PATH，请使用本机 MySQL 客户端完整路径，例如 `C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe`。
 
 执行后确认数据库存在：
@@ -604,17 +611,23 @@ mkdir -p ~/dev/coffee-manager/uploads
 | `GET` | `/api/auth/me` | 获取当前用户信息 |
 | `GET` | `/api/health` | 服务与数据库健康检查 |
 
+枚举 / 常用选项：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/enums/coffee` | 返回 Coffee 新增、编辑和筛选可复用的 roastLevels / processMethods / origins / varieties 常用选项 |
+
 咖啡豆：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/coffee-beans` | 咖啡豆分页列表，支持 keyword / roastLevel / processMethod / origin / page / pageSize |
+| `GET` | `/api/coffee-beans` | 咖啡豆分页列表，支持 keyword / roastLevel / processMethod / origin / drinkStatus / page / pageSize |
 | `POST` | `/api/coffee-beans` | 新增咖啡豆 |
 | `GET` | `/api/coffee-beans/{id}` | 咖啡豆详情 |
 | `PUT` | `/api/coffee-beans/{id}` | 更新咖啡豆 |
 | `DELETE` | `/api/coffee-beans/{id}` | 删除咖啡豆 |
 
-Coffee 新增 / 更新 / 详情 / 列表当前支持 `roastDate`、`bestFromDate`、`bestToDate` 日期字段，前端以 `YYYY-MM-DD` 字符串提交和展示；饮用状态由前端根据赏味开始 / 结束日期本地计算。
+Coffee 新增 / 更新 / 详情 / 列表当前支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate` 字段，日期以前端 `YYYY-MM-DD` 字符串提交和展示；饮用状态由前端根据赏味开始 / 结束日期本地计算。
 
 Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信息、封面、饮用状态、评分 / 评价数 / 冲煮数，并通过评价列表和冲煮列表接口各读取最近 3 条摘要。当前摘要顺序依赖后端列表接口的既有排序：`created_at desc, id desc`。
 
@@ -699,7 +712,7 @@ Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信�
 - 上传文件保存在本地目录，尚未接入云存储或服务器持久化方案。
 - 上传新封面不会自动删除旧文件，图片删除和旧文件清理延后。
 - `review_count`、`overall_rating`、`brew_count` 已在 review / brew 新增、编辑、删除后回写；旧库历史数据可手动执行 `backend/src/main/resources/db/refresh_coffee_aggregates.sql` 修复。
-- roastLevel / processMethod / status 等字段当前以自由输入或前端固定选项为主，尚未统一枚举查询。
+- roastLevel / processMethod / origin / variety 当前已有一期静态常用选项接口；暂不做数据库字典表和枚举管理后台。
 - 数据库脚本包含风味标签相关表和种子数据，但风味标签业务尚未接入。
 - 部分后端错误文案已经中文化，仍存在英文文案；统一中文化延后。
 - 当前 UI 是 MVP 原生样式，正式 UI 组件体系延后。

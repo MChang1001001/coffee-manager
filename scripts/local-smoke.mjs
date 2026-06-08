@@ -49,6 +49,7 @@ async function main() {
   await checkFrontendIfAvailable()
 
   const token = await login()
+  await smokeCoffeeEnums(token)
   await smokeCoffee(token)
   await smokeDrinkStatusFilters(token)
   await smokeFileUpload(token)
@@ -103,6 +104,31 @@ async function login() {
   return body.data.token
 }
 
+async function smokeCoffeeEnums(token) {
+  const body = await requestApi('GET', '/api/enums/coffee', { token })
+  assert(Array.isArray(body.data?.roastLevels), 'Coffee enums roastLevels is not an array')
+  assert(Array.isArray(body.data?.processMethods), 'Coffee enums processMethods is not an array')
+  assert(Array.isArray(body.data?.origins), 'Coffee enums origins is not an array')
+  assert(Array.isArray(body.data?.varieties), 'Coffee enums varieties is not an array')
+  assert(
+    body.data.roastLevels.some((option) => option.label === '浅烘' && option.value === 'LIGHT'),
+    'Coffee enums roastLevels did not include LIGHT'
+  )
+  assert(
+    body.data.processMethods.some((option) => option.label === '水洗' && option.value === '水洗'),
+    'Coffee enums processMethods did not include 水洗'
+  )
+  assert(
+    body.data.origins.some((option) => option.label === '埃塞俄比亚' && option.value === '埃塞俄比亚'),
+    'Coffee enums origins did not include 埃塞俄比亚'
+  )
+  assert(
+    body.data.varieties.some((option) => option.label === '瑰夏' && option.value === '瑰夏'),
+    'Coffee enums varieties did not include 瑰夏'
+  )
+  state.checks.push('Coffee enums: ok (/api/enums/coffee)')
+}
+
 async function smokeCoffee(token) {
   await requestApi('GET', '/api/coffee-beans?page=1&pageSize=10', { token })
 
@@ -137,16 +163,21 @@ async function smokeCoffee(token) {
 
   const detailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
   assert(detailBody.data?.name === `${smokePrefix} Coffee Bean`, 'Coffee detail name mismatch')
+  assert(detailBody.data?.variety === 'Heirloom', 'Coffee detail variety mismatch after create')
   assert(detailBody.data?.bestFromDate === '2026-05-08', 'Coffee detail bestFromDate mismatch')
   assert(detailBody.data?.bestToDate === '2026-06-05', 'Coffee detail bestToDate mismatch')
+  await assertCoffeeListVariety(token, 'Heirloom', 'after create')
 
   const updateBody = await requestApi('PUT', `/api/coffee-beans/${state.coffeeId}`, {
     token,
     json: buildCoffeeUpdatePayload(null),
   })
   assert(updateBody.data === true, 'Coffee update did not return true')
+  const updatedDetailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
+  assert(updatedDetailBody.data?.variety === 'Updated Heirloom', 'Coffee detail variety mismatch after update')
+  await assertCoffeeListVariety(token, 'Updated Heirloom', 'after update')
 
-  state.checks.push(`Coffee list/create/detail/update: ok (id=${state.coffeeId})`)
+  state.checks.push(`Coffee list/create/detail/update/variety: ok (id=${state.coffeeId})`)
 }
 
 async function smokeDrinkStatusFilters(token) {
@@ -569,6 +600,18 @@ function assertAggregateFields(source, expected, label) {
   }
 }
 
+async function assertCoffeeListVariety(token, expectedVariety, label) {
+  const query = buildQueryString({
+    page: 1,
+    pageSize: 50,
+    keyword: smokePrefix,
+  })
+  const listBody = await requestApi('GET', `/api/coffee-beans?${query}`, { token })
+  const item = listBody.data?.items?.find((coffeeBean) => coffeeBean.id === state.coffeeId)
+  assert(item, `Coffee list did not include smoke bean ${label}`)
+  assert(item.variety === expectedVariety, `Coffee list variety mismatch ${label}`)
+}
+
 function assertNumberEquals(actual, expected, label) {
   const actualNumber = Number(actual)
   assert(
@@ -635,7 +678,7 @@ function buildCoffeeUpdatePayload(coverImageUrl) {
     origin: 'Ethiopia',
     region: 'Yirgacheffe',
     farm: 'Smoke Farm',
-    variety: 'Heirloom',
+    variety: 'Updated Heirloom',
     processMethod: 'Natural',
     roastLevel: 'Medium',
     roaster: 'Smoke Roaster',
