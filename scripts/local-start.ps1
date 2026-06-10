@@ -97,6 +97,23 @@ function Test-HttpOk {
     }
 }
 
+function Import-EnvironmentVariable {
+    param([string]$Name)
+
+    if (-not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name, "Process"))) {
+        return
+    }
+
+    $value = [Environment]::GetEnvironmentVariable($Name, "User")
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        $value = [Environment]::GetEnvironmentVariable($Name, "Machine")
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($value)) {
+        [Environment]::SetEnvironmentVariable($Name, $value, "Process")
+    }
+}
+
 function Test-BackendReady {
     try {
         $response = Invoke-RestMethod -Uri $BackendReadyUrl -TimeoutSec 5 -ErrorAction Stop
@@ -221,6 +238,11 @@ Clear-StalePidFile $FrontendPidFile
 if ([string]::IsNullOrWhiteSpace($env:FILE_UPLOAD_PATH)) {
     $env:FILE_UPLOAD_PATH = $UploadsDir
 }
+
+Import-EnvironmentVariable "DEEPSEEK_API_KEY"
+Import-EnvironmentVariable "DEEPSEEK_BASE_URL"
+Import-EnvironmentVariable "DEEPSEEK_MODEL"
+Import-EnvironmentVariable "DEEPSEEK_ENABLED"
 
 $backendWasReady = Assert-PortFreeOrReusable "Backend" $BackendPort ${function:Test-BackendReady}
 $frontendWasReady = Assert-PortFreeOrReusable "Frontend" $FrontendPort { Test-HttpOk $FrontendReadyUrl }
