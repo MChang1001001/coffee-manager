@@ -59,6 +59,21 @@ public class CoffeeBeanController {
         return ApiResponse.success(coffeeBeanService.getDetail(requireUserId(currentUser), id));
     }
 
+    @PostMapping("/{id}/ai-summary")
+    public ApiResponse<CoffeeSummaryDraftResponse> generateAiSummary(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @Positive(message = "咖啡豆ID必须大于0") @PathVariable Long id) {
+        return ApiResponse.success(coffeeBeanService.generateAiSummary(requireUserId(currentUser), id));
+    }
+
+    @PutMapping("/{id}/summary")
+    public ApiResponse<Boolean> updateSummary(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @Positive(message = "咖啡豆ID必须大于0") @PathVariable Long id,
+            @Valid @RequestBody CoffeeSummaryUpdateRequest request) {
+        return ApiResponse.success(coffeeBeanService.updateSummary(requireUserId(currentUser), id, request));
+    }
+
     @GetMapping
     public ApiResponse<PageResponse<CoffeeBeanListItemResponse>> list(
             @AuthenticationPrincipal CurrentUser currentUser,

@@ -14,6 +14,10 @@ public interface CoffeeBeanService {
 
     PageResponse<CoffeeBeanListItemResponse> list(Long userId, CoffeeBeanListQuery query);
 
+    CoffeeSummaryDraftResponse generateAiSummary(Long userId, Long id);
+
+    boolean updateSummary(Long userId, Long id, CoffeeSummaryUpdateRequest request);
+
     void refreshReviewAggregates(Long coffeeBeanId, Long userId);
 
     void refreshBrewAggregates(Long coffeeBeanId, Long userId);

@@ -43,6 +43,8 @@ public class CoffeeBeanListItemResponse {
 
     private Integer brewCount;
 
+    private String summaryTitle;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 }

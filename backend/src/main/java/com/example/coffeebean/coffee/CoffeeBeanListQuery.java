@@ -23,6 +23,9 @@ public class CoffeeBeanListQuery {
     @Size(max = 32, message = "饮用状态不能超过32个字符")
     private String drinkStatus;
 
+    @Size(max = 64, message = "状态不能超过64个字符")
+    private String status;
+
     @Min(value = 1, message = "页码必须大于等于1")
     private Long page = 1L;
 

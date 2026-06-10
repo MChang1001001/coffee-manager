@@ -31,13 +31,19 @@
 
 ## Coffee Beans
 
-- `GET /api/coffee-beans` 咖啡豆列表，支持 `keyword`、`roastLevel`、`processMethod`、`origin`、`drinkStatus`、`page`、`pageSize`。
+- `GET /api/coffee-beans` 咖啡豆列表，支持 `keyword`、`roastLevel`、`processMethod`、`origin`、`drinkStatus`、`status`、`page`、`pageSize`。
 - `POST /api/coffee-beans` 新增咖啡豆。
 - `GET /api/coffee-beans/{id}` 咖啡豆详情。
 - `PUT /api/coffee-beans/{id}` 更新咖啡豆。
+- `POST /api/coffee-beans/{id}/ai-summary` 生成 AI 评测总结草稿，只返回 `summaryTitle`、`flavorSummary`、`brewSuggestion`、`repurchaseIntention`、`summaryText`，不直接保存。
+- `PUT /api/coffee-beans/{id}/summary` 保存用户确认后的评测总结字段，支持字段为空。
 - `DELETE /api/coffee-beans/{id}` 删除咖啡豆。
 - 咖啡豆新增 / 更新 / 详情 / 列表支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate`，日期格式为 `YYYY-MM-DD`，可为空。
+- 咖啡豆详情返回 `summaryTitle`、`flavorSummary`、`brewSuggestion`、`repurchaseIntention`、`summaryText`、`summarySource`、`summaryGeneratedAt`；列表仅返回轻量 `summaryTitle`。
 - `drinkStatus` 支持 `NO_DATE`、`RESTING`、`READY`、`EXPIRING_SOON`、`EXPIRED`，筛选基于数据库 `CURRENT_DATE`。
+- `status` 支持按当前 Coffee 豆子状态等值筛选，页面使用 `UNOPENED`、`OPENED`、`FINISHED`。
+
+AI 评测总结使用后端 `DEEPSEEK_API_KEY` 调用 DeepSeek OpenAI 兼容 `POST /chat/completions`。未配置 key 或关闭 `DEEPSEEK_ENABLED` 时，接口返回中文提示 `AI 总结功能未配置 DeepSeek API Key。`，不会调用外部 API。
 
 ## Files
 

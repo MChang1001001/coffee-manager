@@ -62,6 +62,20 @@ public class CoffeeBean {
 
     private Integer brewCount;
 
+    private String summaryTitle;
+
+    private String flavorSummary;
+
+    private String brewSuggestion;
+
+    private String repurchaseIntention;
+
+    private String summaryText;
+
+    private String summarySource;
+
+    private LocalDateTime summaryGeneratedAt;
+
     private String notes;
 
     private LocalDateTime createdAt;

@@ -1413,6 +1413,95 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
+.detail-ai-summary {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 2px solid #26231d;
+  border-radius: 12px 10px 14px 9px;
+  background:
+    linear-gradient(90deg, rgb(49 89 70 / 7%) 1px, transparent 1px) 0 0 / 18px 18px,
+    #f8f3df;
+  box-shadow: 4px 4px 0 rgb(38 35 29 / 12%);
+  padding: 18px;
+}
+
+.summary-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.summary-alert {
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.summary-detail-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px dashed rgb(38 35 29 / 32%);
+  border-radius: 10px 9px 12px 8px;
+  background: rgb(255 253 246 / 82%);
+  padding: 14px;
+}
+
+.summary-detail-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary-detail-card strong {
+  color: #315946;
+  font-size: 18px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.summary-detail-card span {
+  flex: 0 0 auto;
+  color: #6b6558;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.summary-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.summary-detail-grid div {
+  min-width: 0;
+  border-radius: 9px 8px 10px 7px;
+  background: rgb(49 89 70 / 8%);
+  padding: 12px;
+}
+
+.summary-detail-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.summary-detail-grid dt {
+  color: #6b6558;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.summary-detail-grid dd {
+  margin: 6px 0 0;
+  color: #211f1a;
+  font-weight: 800;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .detail-summary-board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1825,6 +1914,15 @@ textarea:focus {
   width: min(760px, 100%);
 }
 
+.summary-form-dialog-panel {
+  width: min(720px, 100%);
+}
+
+.summary-form {
+  display: grid;
+  gap: 14px;
+}
+
 .review-form {
   display: grid;
   gap: 14px;
@@ -2038,7 +2136,8 @@ textarea:focus {
   }
 
   .filter-actions,
-  .form-actions {
+  .form-actions,
+  .summary-action-group {
     justify-content: stretch;
   }
 
@@ -2062,6 +2161,7 @@ textarea:focus {
 
   .filter-actions button,
   .form-actions button,
+  .summary-action-group button,
   .pagination button,
   .inline-alert button,
   .review-card-header .row-actions button,
@@ -2076,13 +2176,18 @@ textarea:focus {
   }
 
   .detail-summary-header,
-  .summary-card-header {
+  .summary-card-header,
+  .summary-detail-card header {
     align-items: stretch;
     flex-direction: column;
   }
 
   .detail-summary-header .button-link {
     width: 100%;
+  }
+
+  .summary-detail-card span {
+    flex: initial;
   }
 }
 
@@ -2154,6 +2259,10 @@ textarea:focus {
   }
 
   .detail-summary-board {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-detail-grid {
     grid-template-columns: 1fr;
   }
 

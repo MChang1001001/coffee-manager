@@ -225,6 +225,25 @@ ALTER TABLE coffee_beans
   ADD COLUMN variety varchar(128) null comment '品种' AFTER farm;
 ```
 
+如果本地旧版 `coffee_beans` 表还没有 v4 AI 评测总结字段，手动补充：
+
+```powershell
+Get-Content -Raw -Encoding UTF8 backend\src\main\resources\db\add_coffee_ai_summary_fields.sql | mysql -uroot -p123456 --default-character-set=utf8mb4
+```
+
+对应 SQL 内容为：
+
+```sql
+ALTER TABLE coffee_beans
+  ADD COLUMN summary_title VARCHAR(128) DEFAULT NULL COMMENT '一句话评测总结' AFTER brew_count,
+  ADD COLUMN flavor_summary TEXT DEFAULT NULL COMMENT '风味总结' AFTER summary_title,
+  ADD COLUMN brew_suggestion TEXT DEFAULT NULL COMMENT '冲煮建议' AFTER flavor_summary,
+  ADD COLUMN repurchase_intention VARCHAR(32) DEFAULT NULL COMMENT '回购意向' AFTER brew_suggestion,
+  ADD COLUMN summary_text TEXT DEFAULT NULL COMMENT '评测总结正文' AFTER repurchase_intention,
+  ADD COLUMN summary_source VARCHAR(16) DEFAULT NULL COMMENT '总结来源：MANUAL/AI' AFTER summary_text,
+  ADD COLUMN summary_generated_at DATETIME DEFAULT NULL COMMENT 'AI总结生成时间' AFTER summary_source;
+```
+
 如果旧库中的 `review_count`、`overall_rating`、`brew_count` 历史聚合字段与现有 review / brew 数据不一致，可以手动执行历史修复 SQL：
 
 ```powershell
@@ -262,6 +281,10 @@ backend/src/main/resources/application.yml
 | `FILE_UPLOAD_PATH` | `uploads` | 上传根目录，默认相对后端进程启动目录 |
 | `JWT_SECRET` | 开发默认值 | JWT 签名密钥，本地可使用示例值或本地配置值 |
 | `JWT_EXPIRATION_SECONDS` | `604800` | JWT 过期时间，默认 7 天 |
+| `DEEPSEEK_API_KEY` | 空 | DeepSeek API Key；仅后端读取，未配置时 AI 总结接口返回中文提示 |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com` | DeepSeek OpenAI 兼容接口基础地址 |
+| `DEEPSEEK_MODEL` | `deepseek-chat` | AI 总结使用的模型 |
+| `DEEPSEEK_ENABLED` | `true` | 是否启用 DeepSeek 调用；关闭或未配置 key 时不调用外部 API |
 | `REDIS_HOST` | `localhost` | Redis 主机，仅后续预留，当前 MVP 不作为启动必需依赖 |
 | `REDIS_PORT` | `6379` | Redis 端口，仅后续预留，当前 MVP 不作为启动必需依赖 |
 | `REDIS_DATABASE` | `0` | Redis database，仅后续预留，当前 MVP 不作为启动必需依赖 |
@@ -294,6 +317,7 @@ $env:DB_USERNAME='root'
 $env:DB_PASSWORD='你的数据库密码'
 $env:FILE_UPLOAD_PATH='D:\dev\coffee-manager\uploads'
 $env:JWT_SECRET='coffee-manager-local-dev-secret-change-me'
+$env:DEEPSEEK_API_KEY='你的 DeepSeek API Key'
 ```
 
 Linux / macOS 临时配置示例：
@@ -304,6 +328,7 @@ export DB_USERNAME='root'
 export DB_PASSWORD='你的数据库密码'
 export FILE_UPLOAD_PATH="$HOME/dev/coffee-manager/uploads"
 export JWT_SECRET='coffee-manager-local-dev-secret-change-me'
+export DEEPSEEK_API_KEY='你的 DeepSeek API Key'
 ```
 
 ### JWT_SECRET 配置基线
@@ -320,6 +345,21 @@ app:
 MVP 本地开发可以使用默认值、示例值或本地环境变量配置值，保证项目可运行即可。不建议把任何真实生产 secret 写入配置文件或提交到 Git。
 
 当前项目暂未实现正式登录系统、token 刷新、退出失效、黑名单等完整生命周期能力。本阶段只保证 MVP 可运行；正式登录和 token 生命周期后续统一处理。
+
+### DeepSeek AI 总结配置
+
+AI 评测总结只在后端调用 DeepSeek，不会把 API Key 暴露给前端。默认配置位于 `application.yml`：
+
+```yaml
+ai:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    enabled: ${DEEPSEEK_ENABLED:true}
+```
+
+未配置 `DEEPSEEK_API_KEY` 或关闭 `DEEPSEEK_ENABLED` 时，`POST /api/coffee-beans/{id}/ai-summary` 不会调用外部 API，会返回中文提示：`AI 总结功能未配置 DeepSeek API Key。`
 
 ### Redis 当前状态
 
@@ -640,15 +680,19 @@ mkdir -p ~/dev/coffee-manager/uploads
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/coffee-beans` | 咖啡豆分页列表，支持 keyword / roastLevel / processMethod / origin / drinkStatus / page / pageSize |
+| `GET` | `/api/coffee-beans` | 咖啡豆分页列表，支持 keyword / roastLevel / processMethod / origin / drinkStatus / status / page / pageSize |
 | `POST` | `/api/coffee-beans` | 新增咖啡豆 |
 | `GET` | `/api/coffee-beans/{id}` | 咖啡豆详情 |
 | `PUT` | `/api/coffee-beans/{id}` | 更新咖啡豆 |
+| `POST` | `/api/coffee-beans/{id}/ai-summary` | 根据基础信息、评价、冲煮记录生成 AI 评测总结草稿，不直接保存 |
+| `PUT` | `/api/coffee-beans/{id}/summary` | 保存用户确认后的评测总结字段 |
 | `DELETE` | `/api/coffee-beans/{id}` | 删除咖啡豆 |
 
-Coffee 新增 / 更新 / 详情 / 列表当前支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate` 字段，日期以前端 `YYYY-MM-DD` 字符串提交和展示；饮用状态展示由前端根据赏味开始 / 结束日期本地计算，`drinkStatus` 列表筛选由后端基于数据库 `CURRENT_DATE` 判断。
+Coffee 新增 / 更新 / 详情 / 列表当前支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate`、`status` 字段，日期以前端 `YYYY-MM-DD` 字符串提交和展示；饮用状态展示由前端根据赏味开始 / 结束日期本地计算，`drinkStatus` 列表筛选由后端基于数据库 `CURRENT_DATE` 判断。Coffee 页面默认筛选为 `drinkStatus=READY` + `status=OPENED`，即优先展示赏味期中且已开封的豆子。
 
-Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信息、封面、饮用状态、评分 / 评价数 / 冲煮数，并通过评价列表和冲煮列表接口各读取最近 3 条摘要。当前摘要顺序依赖后端列表接口的既有排序：`created_at desc, id desc`。
+Coffee 详情接口返回 `summaryTitle`、`flavorSummary`、`brewSuggestion`、`repurchaseIntention`、`summaryText`、`summarySource`、`summaryGeneratedAt`。`PUT /summary` 可保存这些字段，字段可为空；`summarySource=AI` 时后端写入当前生成时间，`summarySource=MANUAL` 时清空生成时间。
+
+Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信息、封面、饮用状态、评分 / 评价数 / 冲煮数、评测总结，并通过评价列表和冲煮列表接口各读取最近 3 条摘要。当前摘要顺序依赖后端列表接口的既有排序：`created_at desc, id desc`。
 
 文件：
 

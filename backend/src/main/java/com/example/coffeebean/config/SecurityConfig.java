@@ -20,7 +20,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, FileStorageProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, FileStorageProperties.class, DeepSeekProperties.class})
 public class SecurityConfig {
 
     @Bean

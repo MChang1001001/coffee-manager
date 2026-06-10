@@ -1,16 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ensureDevAuth } from '../api/auth'
 import { listBrewRecords } from '../api/brew'
 import type { BrewRecord } from '../api/brew'
-import { getCoffeeBean } from '../api/coffee'
-import type { CoffeeBeanDetail } from '../api/coffee'
+import { generateCoffeeAiSummary, getCoffeeBean, updateCoffeeSummary } from '../api/coffee'
+import type { CoffeeBeanDetail, CoffeeSummaryDraft, CoffeeSummaryPayload } from '../api/coffee'
 import { listCoffeeReviews } from '../api/review'
 import type { CoffeeReview } from '../api/review'
 import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 type CoffeeAction = 'edit' | 'review' | 'brew'
+type SummarySource = 'MANUAL' | 'AI'
+
+interface SummaryForm {
+  summaryTitle: string
+  flavorSummary: string
+  brewSuggestion: string
+  repurchaseIntention: string
+  summaryText: string
+  summarySource: SummarySource
+}
+
+const defaultSummaryForm: SummaryForm = {
+  summaryTitle: '',
+  flavorSummary: '',
+  brewSuggestion: '',
+  repurchaseIntention: '',
+  summaryText: '',
+  summarySource: 'MANUAL',
+}
+
+const repurchaseOptions = ['', '未决定', '会回购', '看情况', '不回购']
 
 const roastLevelLabels: Record<string, string> = {
   LIGHT: '浅烘',
@@ -33,6 +54,13 @@ const reviewSummaryLoading = ref(false)
 const brewSummaryLoading = ref(false)
 const reviewSummaryError = ref('')
 const brewSummaryError = ref('')
+const summaryForm = reactive<SummaryForm>({ ...defaultSummaryForm })
+const isSummaryDialogOpen = ref(false)
+const summaryGenerating = ref(false)
+const summarySaving = ref(false)
+const summaryActionError = ref('')
+const summaryActionNotice = ref('')
+const summaryFormError = ref('')
 
 let beanFetchVersion = 0
 let reviewSummaryFetchVersion = 0
@@ -54,6 +82,28 @@ const originLine = computed(() => {
 const actionBeanId = computed(() => bean.value?.id ?? routeBeanId.value)
 const hasRecentReviews = computed(() => recentReviews.value.length > 0)
 const hasRecentBrewRecords = computed(() => recentBrewRecords.value.length > 0)
+const hasSummary = computed(() =>
+  Boolean(
+    bean.value &&
+      [
+        bean.value.summaryTitle,
+        bean.value.flavorSummary,
+        bean.value.brewSuggestion,
+        bean.value.repurchaseIntention,
+        bean.value.summaryText,
+      ].some(hasText),
+  ),
+)
+const summaryGeneratedMeta = computed(() => {
+  if (!bean.value?.summarySource && !bean.value?.summaryGeneratedAt) {
+    return ''
+  }
+
+  const sourceLabel = bean.value.summarySource === 'AI' ? 'AI 辅助生成' : '手动整理'
+  return bean.value.summaryGeneratedAt
+    ? `${sourceLabel}于 ${timeDisplay(bean.value.summaryGeneratedAt)}`
+    : sourceLabel
+})
 
 onMounted(() => {
   void loadBean()
@@ -190,6 +240,116 @@ function reloadBrewSummary() {
   void fetchBrewSummary()
 }
 
+async function generateSummaryDraft() {
+  if (!actionBeanId.value) {
+    return
+  }
+
+  const beanId = actionBeanId.value
+  summaryGenerating.value = true
+  summaryActionError.value = ''
+  summaryActionNotice.value = ''
+  summaryFormError.value = ''
+
+  try {
+    await ensureDevAuth()
+    const draft = await generateCoffeeAiSummary(beanId)
+
+    if (routeBeanId.value !== beanId) {
+      return
+    }
+
+    fillSummaryForm(draft, 'AI')
+    isSummaryDialogOpen.value = true
+  } catch (caughtError) {
+    if (routeBeanId.value === beanId) {
+      summaryActionError.value = getFriendlyErrorMessage(caughtError, 'AI 总结生成失败，请稍后重试。')
+    }
+  } finally {
+    if (routeBeanId.value === beanId) {
+      summaryGenerating.value = false
+    }
+  }
+}
+
+function openSummaryDialog() {
+  if (!bean.value) {
+    return
+  }
+
+  fillSummaryForm(bean.value, normalizeSummarySource(bean.value.summarySource))
+  summaryFormError.value = ''
+  summaryActionError.value = ''
+  summaryActionNotice.value = ''
+  isSummaryDialogOpen.value = true
+}
+
+function closeSummaryDialog() {
+  if (summarySaving.value) {
+    return
+  }
+
+  isSummaryDialogOpen.value = false
+  summaryFormError.value = ''
+}
+
+async function saveSummary() {
+  if (!actionBeanId.value) {
+    return
+  }
+
+  const beanId = actionBeanId.value
+  summarySaving.value = true
+  summaryFormError.value = ''
+
+  try {
+    await ensureDevAuth()
+    await updateCoffeeSummary(beanId, toSummaryPayload())
+    const detail = await getCoffeeBean(beanId)
+
+    if (routeBeanId.value !== beanId) {
+      return
+    }
+
+    bean.value = detail
+    isSummaryDialogOpen.value = false
+    summaryActionError.value = ''
+    summaryActionNotice.value = '评测总结已保存。'
+  } catch (caughtError) {
+    if (routeBeanId.value === beanId) {
+      summaryFormError.value = getFriendlyErrorMessage(caughtError, '总结保存失败，请稍后重试。')
+    }
+  } finally {
+    if (routeBeanId.value === beanId) {
+      summarySaving.value = false
+    }
+  }
+}
+
+function fillSummaryForm(source: CoffeeSummaryDraft | CoffeeBeanDetail, summarySource: SummarySource) {
+  summaryForm.summaryTitle = source.summaryTitle ?? ''
+  summaryForm.flavorSummary = source.flavorSummary ?? ''
+  summaryForm.brewSuggestion = source.brewSuggestion ?? ''
+  summaryForm.repurchaseIntention = source.repurchaseIntention ?? ''
+  summaryForm.summaryText = source.summaryText ?? ''
+  summaryForm.summarySource = summarySource
+}
+
+function resetSummaryForm() {
+  Object.assign(summaryForm, defaultSummaryForm)
+}
+
+function toSummaryPayload(): CoffeeSummaryPayload {
+  return {
+    summaryTitle: emptyToNull(summaryForm.summaryTitle),
+    flavorSummary: emptyToNull(summaryForm.flavorSummary),
+    brewSuggestion: emptyToNull(summaryForm.brewSuggestion),
+    repurchaseIntention: emptyToNull(summaryForm.repurchaseIntention),
+    summaryText: emptyToNull(summaryForm.summaryText),
+    summarySource: summaryForm.summarySource,
+  }
+}
+
 function getDetailErrorMessage(caughtError: unknown) {
   const message = getFriendlyErrorMessage(caughtError, '咖啡豆档案加载失败，请稍后重试。')
 
@@ -213,6 +373,13 @@ function resetSummaryState() {
   brewSummaryLoading.value = false
   reviewSummaryError.value = ''
   brewSummaryError.value = ''
+  summaryGenerating.value = false
+  summarySaving.value = false
+  summaryActionError.value = ''
+  summaryActionNotice.value = ''
+  summaryFormError.value = ''
+  isSummaryDialogOpen.value = false
+  resetSummaryForm()
 }
 
 function isCurrentBeanFetch(beanId: number, fetchVersion: number) {
@@ -237,6 +404,19 @@ function isCurrentBrewSummaryFetch(beanId: number, fetchVersion: number) {
 
 function display(value: string | number | null | undefined) {
   return value === null || value === undefined || value === '' ? '-' : value
+}
+
+function hasText(value: string | null | undefined) {
+  return Boolean(value?.trim())
+}
+
+function emptyToNull(value: string) {
+  const trimmed = value.trim()
+  return trimmed === '' ? null : trimmed
+}
+
+function normalizeSummarySource(value: string | null | undefined): SummarySource {
+  return value?.trim().toUpperCase() === 'AI' ? 'AI' : 'MANUAL'
 }
 
 function roastLevelLabel(value: string | null | undefined) {
@@ -504,6 +684,64 @@ function joinParts(...parts: Array<string | null | undefined>) {
             </div>
           </dl>
 
+          <section class="detail-ai-summary" aria-labelledby="coffee-summary-title">
+            <header class="detail-summary-header">
+              <div>
+                <p class="mini-label">AI tasting note</p>
+                <h2 id="coffee-summary-title">评测总结</h2>
+              </div>
+              <div class="summary-action-group">
+                <button
+                  type="button"
+                  class="secondary compact-button"
+                  :disabled="summaryGenerating || summarySaving"
+                  @click="generateSummaryDraft"
+                >
+                  {{ summaryGenerating ? '生成中' : 'AI 生成总结' }}
+                </button>
+                <button
+                  type="button"
+                  class="secondary compact-button"
+                  :disabled="summaryGenerating || summarySaving"
+                  @click="openSummaryDialog"
+                >
+                  编辑总结
+                </button>
+              </div>
+            </header>
+
+            <p v-if="summaryActionNotice" class="alert success summary-alert">{{ summaryActionNotice }}</p>
+            <p v-if="summaryActionError" class="alert error summary-alert">{{ summaryActionError }}</p>
+
+            <div v-if="!hasSummary" class="state-box summary-state summary-empty">
+              还没有评测总结，点一下 AI 总结，让系统先帮你打个草稿吧。
+            </div>
+            <article v-else class="summary-detail-card">
+              <header>
+                <strong>{{ display(bean.summaryTitle) }}</strong>
+                <span v-if="summaryGeneratedMeta">{{ summaryGeneratedMeta }}</span>
+              </header>
+              <dl class="summary-detail-grid">
+                <div>
+                  <dt>风味总结</dt>
+                  <dd>{{ display(bean.flavorSummary) }}</dd>
+                </div>
+                <div>
+                  <dt>冲煮建议</dt>
+                  <dd>{{ display(bean.brewSuggestion) }}</dd>
+                </div>
+                <div>
+                  <dt>回购意向</dt>
+                  <dd>{{ display(bean.repurchaseIntention) }}</dd>
+                </div>
+                <div class="wide">
+                  <dt>总结正文</dt>
+                  <dd>{{ display(bean.summaryText) }}</dd>
+                </div>
+              </dl>
+            </article>
+          </section>
+
           <section class="detail-summary-board" aria-label="最近记录">
             <section class="detail-summary-note review-summary-note" aria-labelledby="recent-review-title">
               <header class="detail-summary-header">
@@ -586,5 +824,57 @@ function joinParts(...parts: Array<string | null | undefined>) {
         </div>
       </article>
     </section>
+
+    <div v-if="isSummaryDialogOpen" class="dialog-backdrop" role="presentation">
+      <section class="dialog-panel summary-form-dialog-panel" role="dialog" aria-modal="true" aria-labelledby="summary-dialog-title">
+        <header class="dialog-header">
+          <div>
+            <h2 id="summary-dialog-title">编辑评测总结</h2>
+            <p>{{ summaryForm.summarySource === 'AI' ? 'AI 草稿已填入，可先修改再保存。' : '整理这包豆子的个人评测笔记。' }}</p>
+          </div>
+          <button type="button" class="icon-button" :disabled="summarySaving" aria-label="关闭" @click="closeSummaryDialog">
+            ×
+          </button>
+        </header>
+
+        <form class="summary-form" @submit.prevent="saveSummary">
+          <p v-if="summaryFormError" class="alert error form-alert">{{ summaryFormError }}</p>
+
+          <label class="field">
+            <span>一句话总结</span>
+            <input v-model="summaryForm.summaryTitle" type="text" maxlength="128" placeholder="例如：清甜花香，适合手冲慢慢喝" />
+          </label>
+
+          <label class="field">
+            <span>风味总结</span>
+            <textarea v-model="summaryForm.flavorSummary" rows="4" placeholder="记录主要风味、口感和变化"></textarea>
+          </label>
+
+          <label class="field">
+            <span>冲煮建议</span>
+            <textarea v-model="summaryForm.brewSuggestion" rows="4" placeholder="记录推荐参数、研磨、水温或下次调整方向"></textarea>
+          </label>
+
+          <label class="field">
+            <span>回购意向</span>
+            <select v-model="summaryForm.repurchaseIntention">
+              <option v-for="option in repurchaseOptions" :key="option || 'EMPTY'" :value="option">
+                {{ option || '暂不选择' }}
+              </option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>总结正文</span>
+            <textarea v-model="summaryForm.summaryText" rows="6" placeholder="写下完整评测总结"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" :disabled="summarySaving">{{ summarySaving ? '保存中' : '保存总结' }}</button>
+            <button type="button" class="secondary" :disabled="summarySaving" @click="closeSummaryDialog">取消</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </main>
 </template>

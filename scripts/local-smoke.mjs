@@ -51,6 +51,7 @@ async function main() {
   const token = await login()
   await smokeCoffeeEnums(token)
   await smokeCoffee(token)
+  await smokeCoffeeSummary(token)
   await smokeDrinkStatusFilters(token)
   await smokeFileUpload(token)
   await smokeReview(token)
@@ -180,11 +181,70 @@ async function smokeCoffee(token) {
   state.checks.push(`Coffee list/create/detail/update/variety: ok (id=${state.coffeeId})`)
 }
 
+async function smokeCoffeeSummary(token) {
+  assert(state.coffeeId, 'Cannot smoke coffee summary before coffee is created')
+
+  const emptyDetailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
+  assert(
+    emptyDetailBody.data && Object.prototype.hasOwnProperty.call(emptyDetailBody.data, 'summaryTitle'),
+    'Coffee detail did not include summary fields'
+  )
+  assert(emptyDetailBody.data.summaryTitle === null, 'Initial summaryTitle should be null')
+
+  const summaryPayload = {
+    summaryTitle: `${smokePrefix} summary title`,
+    flavorSummary: `${smokePrefix} flavor summary`,
+    brewSuggestion: `${smokePrefix} brew suggestion`,
+    repurchaseIntention: '看情况',
+    summaryText: `${smokePrefix} summary text`,
+    summarySource: 'AI',
+  }
+  const updateSummaryBody = await requestApi('PUT', `/api/coffee-beans/${state.coffeeId}/summary`, {
+    token,
+    json: summaryPayload,
+  })
+  assert(updateSummaryBody.data === true, 'Coffee summary update did not return true')
+
+  const detailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
+  assert(detailBody.data?.summaryTitle === summaryPayload.summaryTitle, 'Coffee summaryTitle mismatch')
+  assert(detailBody.data?.flavorSummary === summaryPayload.flavorSummary, 'Coffee flavorSummary mismatch')
+  assert(detailBody.data?.brewSuggestion === summaryPayload.brewSuggestion, 'Coffee brewSuggestion mismatch')
+  assert(
+    detailBody.data?.repurchaseIntention === summaryPayload.repurchaseIntention,
+    'Coffee repurchaseIntention mismatch'
+  )
+  assert(detailBody.data?.summaryText === summaryPayload.summaryText, 'Coffee summaryText mismatch')
+  assert(detailBody.data?.summarySource === 'AI', 'Coffee summarySource mismatch')
+  assert(typeof detailBody.data?.summaryGeneratedAt === 'string', 'Coffee summaryGeneratedAt missing after AI save')
+
+  const clearSummaryBody = await requestApi('PUT', `/api/coffee-beans/${state.coffeeId}/summary`, {
+    token,
+    json: {
+      summaryTitle: null,
+      flavorSummary: null,
+      brewSuggestion: null,
+      repurchaseIntention: null,
+      summaryText: null,
+      summarySource: 'MANUAL',
+    },
+  })
+  assert(clearSummaryBody.data === true, 'Coffee empty summary update did not return true')
+  const clearedDetailBody = await requestApi('GET', `/api/coffee-beans/${state.coffeeId}`, { token })
+  assert(clearedDetailBody.data?.summaryTitle === null, 'Coffee summaryTitle should clear to null')
+  assert(clearedDetailBody.data?.flavorSummary === null, 'Coffee flavorSummary should clear to null')
+  assert(clearedDetailBody.data?.brewSuggestion === null, 'Coffee brewSuggestion should clear to null')
+  assert(clearedDetailBody.data?.repurchaseIntention === null, 'Coffee repurchaseIntention should clear to null')
+  assert(clearedDetailBody.data?.summaryText === null, 'Coffee summaryText should clear to null')
+
+  state.checks.push(`Coffee summary save/detail/empty fields: ok (id=${state.coffeeId})`)
+}
+
 async function smokeDrinkStatusFilters(token) {
   const origin = `${smokePrefix} Drink Status Origin`
   const samples = [
     {
       status: 'NO_DATE',
+      beanStatus: 'UNOPENED',
       name: `${smokePrefix} NO_DATE Coffee Bean`,
       roastLevel: 'Smoke No Date Roast',
       processMethod: 'Smoke No Date Process',
@@ -193,6 +253,7 @@ async function smokeDrinkStatusFilters(token) {
     },
     {
       status: 'RESTING',
+      beanStatus: 'UNOPENED',
       name: `${smokePrefix} RESTING Coffee Bean`,
       roastLevel: 'Smoke Resting Roast',
       processMethod: 'Smoke Resting Process',
@@ -201,6 +262,7 @@ async function smokeDrinkStatusFilters(token) {
     },
     {
       status: 'READY',
+      beanStatus: 'OPENED',
       name: `${smokePrefix} READY Coffee Bean`,
       roastLevel: 'Smoke Ready Roast',
       processMethod: 'Smoke Ready Process',
@@ -209,6 +271,7 @@ async function smokeDrinkStatusFilters(token) {
     },
     {
       status: 'EXPIRING_SOON',
+      beanStatus: 'UNOPENED',
       name: `${smokePrefix} EXPIRING_SOON Coffee Bean`,
       roastLevel: 'Smoke Expiring Soon Roast',
       processMethod: 'Smoke Expiring Soon Process',
@@ -217,6 +280,7 @@ async function smokeDrinkStatusFilters(token) {
     },
     {
       status: 'EXPIRED',
+      beanStatus: 'FINISHED',
       name: `${smokePrefix} EXPIRED Coffee Bean`,
       roastLevel: 'Smoke Expired Roast',
       processMethod: 'Smoke Expired Process',
@@ -246,7 +310,7 @@ async function smokeDrinkStatusFilters(token) {
         netWeightGrams: 100,
         price: 10,
         currency: 'CNY',
-        status: 'UNOPENED',
+        status: sample.beanStatus,
         coverImageUrl: null,
         notes: `${smokePrefix} drink status ${sample.status}`,
       },
@@ -277,14 +341,26 @@ async function smokeDrinkStatusFilters(token) {
     roastLevel: readySample.roastLevel,
     processMethod: readySample.processMethod,
     drinkStatus: readySample.status,
+    status: readySample.beanStatus,
   })
   const combinedPage = await requestApi('GET', `/api/coffee-beans?${combinedQuery}`, { token })
   assertDrinkStatusPage(combinedPage, readySample, state.drinkStatusSamples, 'Combined READY filters')
 
+  const openedStatusQuery = buildQueryString({
+    page: 1,
+    pageSize: 10,
+    origin,
+    status: readySample.beanStatus,
+  })
+  const openedStatusPage = await requestApi('GET', `/api/coffee-beans?${openedStatusQuery}`, {
+    token,
+  })
+  assertDrinkStatusPage(openedStatusPage, readySample, state.drinkStatusSamples, 'OPENED bean status')
+
   const summary = state.drinkStatusSamples
     .map((sample) => `${sample.status}=${sample.id}`)
     .join(', ')
-  state.checks.push(`Coffee drinkStatus filters/combined filters: ok (${summary})`)
+  state.checks.push(`Coffee drinkStatus/status filters/combined filters: ok (${summary})`)
 }
 
 async function smokeFileUpload(token) {

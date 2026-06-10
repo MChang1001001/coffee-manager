@@ -47,6 +47,13 @@ app:
     secret: ${JWT_SECRET:coffee-manager-dev-secret-key-change-me-20260507-min-32-bytes}
     expiration-seconds: ${JWT_EXPIRATION_SECONDS:604800}
 
+ai:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:sk-ef8993dc8e2c4a4fbfc74f9d7def21b8}
+    base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+    model: ${DEEPSEEK_MODEL:deepseek-chat}
+    enabled: ${DEEPSEEK_ENABLED:true}
+
 logging:
   level:
     com.example.coffeebean: debug

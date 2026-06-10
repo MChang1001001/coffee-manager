@@ -55,6 +55,21 @@ public class CoffeeBeanDetailResponse {
 
     private Integer brewCount;
 
+    private String summaryTitle;
+
+    private String flavorSummary;
+
+    private String brewSuggestion;
+
+    private String repurchaseIntention;
+
+    private String summaryText;
+
+    private String summarySource;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime summaryGeneratedAt;
+
     private String notes;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

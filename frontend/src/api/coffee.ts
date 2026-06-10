@@ -14,6 +14,7 @@ export interface CoffeeBeanQuery {
   processMethod?: string
   origin?: string
   drinkStatus?: string
+  status?: string
   page: number
   pageSize: number
 }
@@ -36,6 +37,7 @@ export interface CoffeeBeanListItem {
   overallRating: number | string | null
   reviewCount: number | null
   brewCount: number | null
+  summaryTitle: string | null
   createdAt: string | null
 }
 
@@ -67,8 +69,30 @@ export interface CoffeeBeanDetail extends CoffeeBeanPayload {
   overallRating: number | string | null
   reviewCount: number | null
   brewCount: number | null
+  summaryTitle: string | null
+  flavorSummary: string | null
+  brewSuggestion: string | null
+  repurchaseIntention: string | null
+  summaryText: string | null
+  summarySource: string | null
+  summaryGeneratedAt: string | null
   createdAt: string | null
   updatedAt: string | null
+}
+
+export interface CoffeeSummaryPayload {
+  summaryTitle: string | null
+  flavorSummary: string | null
+  brewSuggestion: string | null
+  repurchaseIntention: string | null
+  summaryText: string | null
+  summarySource?: string | null
+  summaryGeneratedAt?: string | null
+}
+
+export interface CoffeeSummaryDraft extends CoffeeSummaryPayload {
+  summarySource: string | null
+  summaryGeneratedAt: string | null
 }
 
 export interface CoffeeBeanIdResponse {
@@ -123,6 +147,21 @@ export function createCoffeeBean(payload: CoffeeBeanPayload) {
 export function updateCoffeeBean(id: number, payload: CoffeeBeanPayload) {
   return request<boolean>({
     url: `${coffeeBeanPath}/${id}`,
+    method: 'PUT',
+    data: payload,
+  })
+}
+
+export function generateCoffeeAiSummary(id: number) {
+  return request<CoffeeSummaryDraft>({
+    url: `${coffeeBeanPath}/${id}/ai-summary`,
+    method: 'POST',
+  })
+}
+
+export function updateCoffeeSummary(id: number, payload: CoffeeSummaryPayload) {
+  return request<boolean>({
+    url: `${coffeeBeanPath}/${id}/summary`,
     method: 'PUT',
     data: payload,
   })

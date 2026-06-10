@@ -87,9 +87,22 @@ interface BrewForm {
 type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
 type CoffeeRouteAction = 'edit' | 'review' | 'brew'
 type DrinkStatusFilter = '' | 'NO_DATE' | 'RESTING' | 'READY' | 'EXPIRING_SOON' | 'EXPIRED'
+type BeanStatusFilter = '' | 'UNOPENED' | 'OPENED' | 'FINISHED'
+
+interface CoffeeFilters {
+  keyword: string
+  processMethod: string
+  origin: string
+  drinkStatus: DrinkStatusFilter
+  status: BeanStatusFilter
+  page: number
+  pageSize: number
+}
 
 const MAX_COVER_FILE_SIZE_BYTES = 5 * 1024 * 1024
 const SUPPORTED_COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const DEFAULT_DRINK_STATUS_FILTER: DrinkStatusFilter = 'READY'
+const DEFAULT_BEAN_STATUS_FILTER: BeanStatusFilter = 'OPENED'
 
 const defaultForm: CoffeeBeanForm = {
   name: '',
@@ -157,6 +170,13 @@ const drinkStatusOptions: Array<{ value: DrinkStatusFilter; label: string }> = [
   { value: 'READY', label: '赏味期中' },
   { value: 'EXPIRING_SOON', label: '即将过赏味期' },
   { value: 'EXPIRED', label: '已过赏味期' },
+]
+
+const beanStatusOptions: Array<{ value: BeanStatusFilter; label: string }> = [
+  { value: '', label: '全部豆子状态' },
+  { value: 'UNOPENED', label: '未开封' },
+  { value: 'OPENED', label: '已开封' },
+  { value: 'FINISHED', label: '已喝完' },
 ]
 
 const coffeeEnumFallback: CoffeeEnumOptions = {
@@ -254,12 +274,12 @@ const isBrewDialogOpen = ref(false)
 const isBrewFormDialogOpen = ref(false)
 const handlingRouteAction = ref(false)
 
-const filters = reactive({
+const filters = reactive<CoffeeFilters>({
   keyword: '',
-  roastLevel: '',
   processMethod: '',
   origin: '',
-  drinkStatus: '' as DrinkStatusFilter,
+  drinkStatus: DEFAULT_DRINK_STATUS_FILTER,
+  status: DEFAULT_BEAN_STATUS_FILTER,
   page: 1,
   pageSize: 20,
 })
@@ -320,7 +340,7 @@ const openedBeanCount = computed(
 const coverBeanCount = computed(() => beans.value.filter((bean) => bean.coverImageUrl).length)
 const activeFilterCount = computed(
   () =>
-    [filters.keyword, filters.roastLevel, filters.processMethod, filters.origin, filters.drinkStatus].filter(
+    [filters.keyword, filters.processMethod, filters.origin, filters.drinkStatus, filters.status].filter(
       (value) => value.trim() !== '',
     ).length,
 )
@@ -402,7 +422,6 @@ const processMethodOptions = computed(() => coffeeEnums.value.processMethods)
 const originOptions = computed(() => coffeeEnums.value.origins)
 const varietyOptions = computed(() => coffeeEnums.value.varieties)
 const formRoastLevelOptions = computed(() => withCurrentOption(roastLevelOptions.value, form.roastLevel))
-const filterRoastLevelOptions = computed(() => withCurrentOption(roastLevelOptions.value, filters.roastLevel))
 
 onMounted(() => {
   void bootPage()
@@ -473,10 +492,10 @@ function applyPage(page: PageResponse<CoffeeBeanListItem>) {
 function buildQuery(): CoffeeBeanQuery {
   return {
     keyword: emptyToUndefined(filters.keyword),
-    roastLevel: emptyToUndefined(filters.roastLevel),
     processMethod: emptyToUndefined(filters.processMethod),
     origin: emptyToUndefined(filters.origin),
     drinkStatus: emptyToUndefined(filters.drinkStatus),
+    status: emptyToUndefined(filters.status),
     page: filters.page,
     pageSize: filters.pageSize,
   }
@@ -491,10 +510,10 @@ function applyFilters() {
 function resetFilters() {
   notice.value = ''
   filters.keyword = ''
-  filters.roastLevel = ''
   filters.processMethod = ''
   filters.origin = ''
-  filters.drinkStatus = ''
+  filters.drinkStatus = DEFAULT_DRINK_STATUS_FILTER
+  filters.status = DEFAULT_BEAN_STATUS_FILTER
   filters.page = 1
   filters.pageSize = 20
   void fetchBeans()
@@ -592,6 +611,7 @@ function detailToListItem(detail: CoffeeBeanDetail): CoffeeBeanListItem {
     overallRating: detail.overallRating,
     reviewCount: detail.reviewCount,
     brewCount: detail.brewCount,
+    summaryTitle: detail.summaryTitle,
     createdAt: detail.createdAt,
   }
 }
@@ -1885,16 +1905,6 @@ function joinParts(...parts: Array<string | null | undefined>) {
         </label>
 
         <label class="field">
-          <span>烘焙度</span>
-          <select v-model="filters.roastLevel" :disabled="loading" @change="applyFilters">
-            <option value="">全部烘焙度</option>
-            <option v-for="option in filterRoastLevelOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
-
-        <label class="field">
           <span>处理法</span>
           <input
             v-model="filters.processMethod"
@@ -1911,8 +1921,17 @@ function joinParts(...parts: Array<string | null | undefined>) {
 
         <label class="field">
           <span>饮用状态</span>
-          <select v-model="filters.drinkStatus" @change="applyFilters">
+          <select v-model="filters.drinkStatus" :disabled="loading" @change="applyFilters">
             <option v-for="option in drinkStatusOptions" :key="option.value || 'ALL'" :value="option.value">
+              {{ option.label }}
+            </option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>豆子状态</span>
+          <select v-model="filters.status" :disabled="loading" @change="applyFilters">
+            <option v-for="option in beanStatusOptions" :key="option.value || 'ALL'" :value="option.value">
               {{ option.label }}
             </option>
           </select>
