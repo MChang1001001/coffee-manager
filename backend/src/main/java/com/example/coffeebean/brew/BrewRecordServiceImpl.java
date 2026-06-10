@@ -75,7 +75,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
         boolean updated = update(new LambdaUpdateWrapper<BrewRecord>()
                 .eq(BrewRecord::getId, id)
                 .eq(BrewRecord::getUserId, userId)
-                .set(BrewRecord::getBrewMethod, requireText(request.getBrewMethod(), "brewMethod cannot be blank"))
+                .set(BrewRecord::getBrewMethod, requireText(request.getBrewMethod(), "冲煮方式不能为空"))
                 .set(BrewRecord::getBeanAmountGrams, request.getBeanAmountGrams())
                 .set(BrewRecord::getWaterAmountMl, request.getWaterAmountMl())
                 .set(BrewRecord::getRatio, normalize(request.getRatio()))
@@ -86,7 +86,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
                 .set(BrewRecord::getResultNotes, normalize(request.getResultNotes()))
                 .set(BrewRecord::getIsRecommended, toRecommendedValue(request.getIsRecommended())));
         if (!updated) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Brew record not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND, "冲煮记录不存在");
         }
         coffeeBeanService.refreshBrewAggregates(brewRecord.getCoffeeBeanId(), userId);
         return true;
@@ -101,7 +101,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
                 .eq(BrewRecord::getId, id)
                 .eq(BrewRecord::getUserId, userId));
         if (!removed) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Brew record not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND, "冲煮记录不存在");
         }
         coffeeBeanService.refreshBrewAggregates(brewRecord.getCoffeeBeanId(), userId);
         return true;
@@ -112,7 +112,7 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
                 .eq(CoffeeBean::getId, coffeeBeanId)
                 .eq(CoffeeBean::getUserId, userId));
         if (count == null || count == 0) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Coffee bean not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND, "咖啡豆不存在");
         }
     }
 
@@ -122,13 +122,13 @@ public class BrewRecordServiceImpl extends ServiceImpl<BrewRecordMapper, BrewRec
                 .eq(BrewRecord::getUserId, userId)
                 .last("LIMIT 1"));
         if (brewRecord == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Brew record not found");
+            throw new BusinessException(ErrorCode.NOT_FOUND, "冲煮记录不存在");
         }
         return brewRecord;
     }
 
     private void fillCreateFields(BrewRecord brewRecord, BrewRecordCreateRequest request) {
-        brewRecord.setBrewMethod(requireText(request.getBrewMethod(), "brewMethod cannot be blank"));
+        brewRecord.setBrewMethod(requireText(request.getBrewMethod(), "冲煮方式不能为空"));
         brewRecord.setBeanAmountGrams(request.getBeanAmountGrams());
         brewRecord.setWaterAmountMl(request.getWaterAmountMl());
         brewRecord.setRatio(normalize(request.getRatio()));

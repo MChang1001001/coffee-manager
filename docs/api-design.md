@@ -24,14 +24,20 @@
 - `GET /api/auth/me` 获取当前用户信息。
 - `GET /api/health` 健康检查。
 
+## Enums
+
+- `GET /api/enums/coffee` 获取 Coffee 表单和筛选复用的常用选项，包含 `roastLevels`、`processMethods`、`origins`、`varieties`。
+- 枚举接口走现有 JWT 认证体系；当前选项写在后端静态代码里，暂不提供字典表或后台管理。
+
 ## Coffee Beans
 
-- `GET /api/coffee-beans` 咖啡豆列表，支持 `keyword`、`roastLevel`、`processMethod`、`origin`、`page`、`pageSize`。
+- `GET /api/coffee-beans` 咖啡豆列表，支持 `keyword`、`roastLevel`、`processMethod`、`origin`、`drinkStatus`、`page`、`pageSize`。
 - `POST /api/coffee-beans` 新增咖啡豆。
 - `GET /api/coffee-beans/{id}` 咖啡豆详情。
 - `PUT /api/coffee-beans/{id}` 更新咖啡豆。
 - `DELETE /api/coffee-beans/{id}` 删除咖啡豆。
-- 咖啡豆新增 / 更新 / 详情 / 列表支持 `roastDate`、`bestFromDate`、`bestToDate`，日期格式为 `YYYY-MM-DD`，可为空。
+- 咖啡豆新增 / 更新 / 详情 / 列表支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate`，日期格式为 `YYYY-MM-DD`，可为空。
+- `drinkStatus` 支持 `NO_DATE`、`RESTING`、`READY`、`EXPIRING_SOON`、`EXPIRED`，筛选基于数据库 `CURRENT_DATE`。
 
 ## Files
 
@@ -49,6 +55,7 @@
 - `DELETE /api/reviews/{id}` 删除评价。
 
 评价评分范围为 0.0-5.0，步进为 0.5；综合评分必填，维度评分可选。
+新增、编辑、删除评价后会刷新咖啡豆的 `review_count` / `overall_rating` 聚合字段。
 
 ## Brew Records
 
@@ -57,10 +64,10 @@
 - `GET /api/brew-records/{id}` 冲煮记录详情。
 - `PUT /api/brew-records/{id}` 更新冲煮记录。
 - `DELETE /api/brew-records/{id}` 删除冲煮记录。
+新增、编辑、删除冲煮记录后会刷新咖啡豆的 `brew_count` 聚合字段。
 
 ## Deferred
 
 - `PATCH /api/coffee-beans/{id}/status` 未实现，当前通过更新咖啡豆接口整体保存状态字段。
 - 风味标签查询、新增和关联未形成 MVP 闭环。
-- `review_count` / `overall_rating` / `brew_count` 聚合回写延后。
-- 枚举查询与字段标准化延后。
+- 字典表 / 枚举后台管理未实现，当前仅提供后端静态常用选项。

@@ -2,7 +2,7 @@ package com.example.coffeebean.common;
 
 public enum ErrorCode {
 
-    SUCCESS(0, "success"),
+    SUCCESS(0, "成功"),
     BAD_REQUEST(40000, "请求错误"),
     PARAM_ERROR(40001, "参数错误"),
     UNAUTHORIZED(40100, "未登录或 token 无效"),

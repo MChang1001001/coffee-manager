@@ -7,11 +7,11 @@ import lombok.Data;
 @Data
 public class BrewRecordListQuery {
 
-    @Min(value = 1, message = "page must be greater than or equal to 1")
+    @Min(value = 1, message = "页码必须大于等于1")
     private Long page = 1L;
 
-    @Min(value = 1, message = "pageSize must be greater than or equal to 1")
-    @Max(value = 100, message = "pageSize must be less than or equal to 100")
+    @Min(value = 1, message = "每页数量必须大于等于1")
+    @Max(value = 100, message = "每页数量不能超过100")
     private Long pageSize = 20L;
 
     public long resolvedPage() {

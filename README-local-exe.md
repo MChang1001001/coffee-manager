@@ -6,7 +6,7 @@
 
 它不是完整单文件应用，不包含 MySQL，不内置 Java/Maven/Node/npm，也不会把前端静态资源合并进后端。当前目标是方便本机日常启动本项目的 Spring Boot 后端和 Vite 前端。
 
-v0.2 本地版中，启动器一期属于本地可复现启动能力的一部分。它负责启动或复用本机后端和前端服务，不改变数据库结构，不执行 migration，不替代 `node scripts\local-smoke.mjs`。
+v0.3 本地版中，启动器一期仍属于本地可复现启动能力的一部分。它负责启动或复用本机后端和前端服务，不改变数据库结构，不执行 migration，不替代 `node scripts\local-smoke.mjs`，也不替代 `node scripts\clean-smoke-data.mjs --dry-run`。
 
 ## 2. 前置条件
 
@@ -94,6 +94,14 @@ SMOKE_TEST_RESULT: PASS
 ```
 
 烟测会创建带 `[SMOKE_TEST]` 前缀的 coffee / review / brew 测试数据，删除接口当前是逻辑删除，因此 MySQL 中可能留下 `deleted=1` 记录。烟测还会上传一张测试封面，本地 uploads 目录可能留下测试文件。
+
+如需查看可安全识别的 smoke 残留，可在项目根目录运行：
+
+```powershell
+node scripts\clean-smoke-data.mjs --dry-run
+```
+
+清理工具默认就是 dry-run；只有显式传入 `--execute` 才会物理清理明确属于 `[SMOKE_TEST]` 的数据库记录和数据库记录明确引用的 smoke 上传文件。无法证明归属的 uploads 文件会跳过。
 
 ## 7. 如何查看日志
 
@@ -225,4 +233,4 @@ Get-Content .\logs\frontend.log -Tail 120
 
 ### 封面图片显示占位
 
-历史旧封面文件如果已经不存在，页面会使用兜底占位展示。这是 v0.2 本地版已接受行为，不影响 Coffee 列表、详情、评价和冲煮主链路。
+历史旧封面文件如果已经不存在，页面会使用兜底占位展示。这是 v0.3 本地版已接受行为，不影响 Coffee 列表、详情、评价和冲煮主链路。

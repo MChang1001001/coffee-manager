@@ -4,11 +4,11 @@
 
 咖啡豆管理项目是一个面向个人使用的咖啡豆档案库，用来记录咖啡豆基础信息、包装封面、主观评价和实际冲煮复盘，帮助用户形成可回溯的饮用经验。
 
-当前项目已收口为 v0.2 本地版：v1 / MVP 主链路、v2 Coffee 首页 UI、养豆期 / 赏味期字段、Coffee 档案详情页、详情页最近评价 / 最近冲煮摘要、本地 exe 启动器一期和本地烟测脚本均已完成。本 README 面向本地 MySQL、本地 Spring Boot 后端、本地 Vite 前端和本地 uploads 目录，记录当前已实现能力、启动方式、配置方式和后续边界，不包含服务器上线能力。
+当前项目已收口为 v0.3 本地版：v1 / MVP 主链路、v2 Coffee 首页 UI 与本地启动能力、v3 聚合回写、饮用状态筛选、本地 smoke 残留清理、枚举值 / 常用选项体系、`variety` 豆种字段、中文错误文案与提示体验统一一期均已完成。本 README 面向本地 MySQL、本地 Spring Boot 后端、本地 Vite 前端和本地 uploads 目录，记录当前已实现能力、启动方式、配置方式和后续边界，不包含服务器上线能力。
 
 ## 功能概览
 
-v0.2 本地版已实现：
+v0.3 本地版已实现：
 
 - 日系手账风 Coffee 首页：`/coffee` 作为当前主页面，保留搜索、筛选、分页和卡片式档案管理。
 - Coffee CRUD 主链路：咖啡豆新增、编辑、删除、详情、列表、搜索、筛选、分页。
@@ -17,11 +17,17 @@ v0.2 本地版已实现：
 - 冲煮记录 CRUD：围绕指定咖啡豆新增、编辑、删除、分页查看冲煮复盘。
 - 养豆期 / 赏味期字段：Coffee 新增、编辑、列表、详情均支持 `roastDate`、`bestFromDate`、`bestToDate`。
 - 饮用状态展示：前端根据赏味开始 / 结束日期展示养豆中、赏味期中、即将过赏味期、已过赏味期或未填写日期。
+- 饮用状态筛选：Coffee 分页列表支持 `drinkStatus`，可与关键词、烘焙度、处理法、产地组合筛选。
+- 豆种字段：Coffee 新增、编辑、列表、详情均支持 `variety`。
 - Coffee 档案详情页：`/coffee-beans/:id` 展示封面、基础信息、日期、状态、评分、评价数、冲煮数和操作入口。
 - 详情页最近评价摘要：详情页拉取当前咖啡豆最近 3 条评价摘要。
 - 详情页最近冲煮摘要：详情页拉取当前咖啡豆最近 3 条冲煮摘要。
+- 聚合回写：`review_count`、`overall_rating`、`brew_count` 在 review / brew 新增、编辑、删除后回写。
+- 枚举值 / 常用选项体系：`GET /api/enums/coffee` 返回 Coffee 表单和筛选复用的烘焙度、处理法、产地、豆种常用选项。
+- 中文错误文案与提示体验统一一期：主要表单校验、上传错误、资源不存在、网络异常等提示已统一成更适合本地使用的中文文案。
 - 本地 exe 启动器一期：`launcher/喝咖啡.exe` 包装 `scripts/local-start.ps1`，用于 Windows 本机双击启动。
-- 本地烟测脚本：`node scripts\local-smoke.mjs` 验证 health、登录、coffee、file、review、brew 主链路。
+- 本地烟测脚本：`node scripts\local-smoke.mjs` 验证 health、登录、coffee、枚举、饮用状态筛选、file、review、brew、聚合回写主链路。
+- 本地 smoke 残留清理脚本：`node scripts\clean-smoke-data.mjs` 默认 dry-run，只清理可证明属于 `[SMOKE_TEST]` 的本地残留。
 - 临时默认登录：前端当前会使用 `admin/admin123456` 自动登录。
 
 未实现或延后内容见下方“延后事项”。
@@ -72,11 +78,14 @@ coffee-manager/
     local-start.ps1                本地启动脚本
     local-stop.ps1                 本地停止脚本
     local-status.ps1               本地状态检查脚本
-    local-smoke.mjs                本地 v0.2 主链路烟测脚本
+    local-smoke.mjs                本地 v0.3 主链路烟测脚本
+    clean-smoke-data.mjs           本地 smoke 残留清理脚本，默认 dry-run
   launcher/
     喝咖啡.exe                     Windows 本地 exe 启动器
   docs/                            需求、数据库、接口文档、项目状态索引与 release notes
     v0.2-release-notes.md          v0.2 本地版定版记录
+    v0.3-release-notes.md          v0.3 本地版定版记录
+    v0.3-clean-smoke-data.md       本地 smoke 残留清理说明
   uploads/                         运行时上传目录，已 gitignore
 ```
 
@@ -100,7 +109,7 @@ npm -v
 mysql --version
 ```
 
-## v0.2 本地版启动方式速查
+## v0.3 本地版启动方式速查
 
 开发启动方式：
 
@@ -178,9 +187,9 @@ backend/src/main/resources/db/init.sql
 - 写入默认用户 `admin`。
 - 写入一批风味标签基础数据；当前仅作为预留数据，前端和后端业务接口尚未接入风味标签功能。
 
-应用配置中 `spring.sql.init.mode=never`，所以后端启动时不会自动执行 SQL。首次启动前需要手动执行：
+应用配置中 `spring.sql.init.mode=never`，所以后端启动时不会自动执行 SQL。当前仍不引入 migration 工具，首次启动或旧库补字段都需要手动执行 SQL。执行任何 SQL 前，建议先备份本地 `coffee_manager` 库。
 
-v0.2 本地版继续采用手动 SQL，不引入 migration 工具。旧库补字段时请手动执行下面的 `ALTER TABLE`，不要期待后端启动时自动迁移表结构。
+v0.3 本地版继续采用手动 SQL。旧库补字段时请手动执行下面的 `ALTER TABLE`，不要期待后端启动时自动迁移表结构。
 
 ```powershell
 Get-Content -Raw -Encoding UTF8 backend\src\main\resources\db\init.sql | mysql -uroot -p123456 --default-character-set=utf8mb4
@@ -215,6 +224,14 @@ ALTER TABLE coffee_beans
 ALTER TABLE coffee_beans
   ADD COLUMN variety varchar(128) null comment '品种' AFTER farm;
 ```
+
+如果旧库中的 `review_count`、`overall_rating`、`brew_count` 历史聚合字段与现有 review / brew 数据不一致，可以手动执行历史修复 SQL：
+
+```powershell
+Get-Content -Raw -Encoding UTF8 backend\src\main\resources\db\refresh_coffee_aggregates.sql | mysql -uroot -p123456 --default-character-set=utf8mb4
+```
+
+该 SQL 只修复已有聚合缓存字段，不创建表、不修改表结构、不替代后续手动 SQL 管理。
 
 如果 `mysql` 命令没有加入 PATH，请使用本机 MySQL 客户端完整路径，例如 `C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe`。
 
@@ -433,7 +450,7 @@ scripts/local-smoke.mjs
 
 脚本用途：
 
-- 快速确认本地 v0.2 主链路可用。
+- 快速确认本地 v0.3 主链路可用。
 - 适用于本地开发前、README 启动步骤调整后、或继续开发前的轻量回归检查。
 - 不是生产验证脚本，不是 CI/CD 方案，也不是完整自动化测试体系。
 
@@ -474,10 +491,12 @@ node scripts\local-smoke.mjs
 
 - 后端健康检查：`GET /api/health`。
 - 登录 / token 获取：`POST /api/auth/login`。
-- coffee 主链路：列表、新增、详情、编辑、删除。
+- 枚举 / 常用选项：`GET /api/enums/coffee`。
+- coffee 主链路：列表、新增、详情、编辑、删除、`variety` 读写。
+- 饮用状态筛选：`drinkStatus` 五类状态与组合筛选。
 - file 主链路：上传封面，校验 `/uploads/coffee-covers/{filename}` 静态访问。
-- review 主链路：列表、新增、详情、编辑、删除。
-- brew 主链路：列表、新增、详情、编辑、删除。
+- review 主链路：列表、新增、详情、编辑、删除，并校验 `review_count` / `overall_rating` 聚合。
+- brew 主链路：列表、新增、详情、编辑、删除，并校验 `brew_count` 聚合。
 - 前端可选检查：访问 `/coffee`，并通过 Vite proxy 检查 `/api` 和 `/uploads`。
 
 预期输出：
@@ -500,7 +519,7 @@ SMOKE_TEST_RESULT: PASS
 - 烟测数据会带 `[SMOKE_TEST]` 前缀。
 - 删除接口当前是逻辑删除，烟测会留下 `deleted=1` 的数据库记录。
 - 文件上传会落盘，烟测会在本地 uploads 目录留下测试上传文件。
-- 脚本只用于本地开发 / v0.2 回归检查，不扩展为完整自动化测试体系。
+- 脚本只用于本地开发 / v0.3 回归检查，不扩展为完整自动化测试体系。
 
 ### 本地 smoke 残留清理
 
@@ -512,7 +531,7 @@ node scripts\clean-smoke-data.mjs --dry-run
 node scripts\clean-smoke-data.mjs --execute
 ```
 
-默认和 `--dry-run` 都只预览，不删除；只有 `--execute` 会物理清理明确带 `[SMOKE_TEST]` 的 coffee 记录、其关联 `coffee_reviews` / `brew_records`，以及这些 smoke coffee 数据库记录明确引用的上传封面文件。执行前请先 dry-run，详细说明见 `docs/v0.3-clean-smoke-data.md`。
+默认和 `--dry-run` 都只预览，不删除；只有 `--execute` 会物理清理明确带 `[SMOKE_TEST]` 的 coffee 记录、其关联 `coffee_reviews` / `brew_records`，以及这些 smoke coffee 数据库记录明确引用的上传封面文件。无法从数据库记录证明归属的 uploads 文件会跳过，不会按文件名猜测删除。执行前请先 dry-run，详细说明见 `docs/v0.3-clean-smoke-data.md`。
 
 ## 默认登录账号
 
@@ -627,7 +646,7 @@ mkdir -p ~/dev/coffee-manager/uploads
 | `PUT` | `/api/coffee-beans/{id}` | 更新咖啡豆 |
 | `DELETE` | `/api/coffee-beans/{id}` | 删除咖啡豆 |
 
-Coffee 新增 / 更新 / 详情 / 列表当前支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate` 字段，日期以前端 `YYYY-MM-DD` 字符串提交和展示；饮用状态由前端根据赏味开始 / 结束日期本地计算。
+Coffee 新增 / 更新 / 详情 / 列表当前支持 `variety`、`roastDate`、`bestFromDate`、`bestToDate` 字段，日期以前端 `YYYY-MM-DD` 字符串提交和展示；饮用状态展示由前端根据赏味开始 / 结束日期本地计算，`drinkStatus` 列表筛选由后端基于数据库 `CURRENT_DATE` 判断。
 
 Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信息、封面、饮用状态、评分 / 评价数 / 冲煮数，并通过评价列表和冲煮列表接口各读取最近 3 条摘要。当前摘要顺序依赖后端列表接口的既有排序：`created_at desc, id desc`。
 
@@ -660,75 +679,48 @@ Coffee 档案详情页位于 `/coffee-beans/{id}`。详情页会展示基础信�
 
 ## 当前已验证内容
 
-根据当前项目收口状态，v0.2 本地版已完成并通过以下验证范围：
+根据当前项目收口状态，v0.3 本地版已完成并通过以下验证范围：
 
-- 后端 coffee 模块闭环。
-- 前端 Coffee 首页闭环。
-- 日系手账风 Coffee 首页 UI 一期。
-- Coffee 档案详情页一期。
-- 详情页最近评价摘要和最近冲煮摘要。
-- 养豆期 / 赏味期字段前后端读写和展示。
-- 饮用状态前端展示。
-- coffee 新增 / 编辑弹窗化。
-- 后端 file 封面上传模块。
-- 前端封面上传联调。
-- 后端 review 模块。
-- 前端 review 评价功能联调。
-- review 模块 MVP 闭环。
-- 后端 brew 模块。
-- 前端 brew 冲煮记录联调。
-- brew 模块 MVP 闭环。
-- Windows 本地 exe 启动器一期。
-- 本地一键烟测脚本。
-- 全流程 bugfix / MVP 收口检查通过，当前暂无必须修问题。
+- v1 / MVP：coffee、file、review、brew 主链路。
+- v2 / v0.2：Coffee 首页 UI、养豆期 / 赏味期字段、Coffee 档案详情页、详情页最近评价 / 最近冲煮摘要、本地 exe 启动器一期、本地 smoke 脚本。
+- v3 / v0.3：`review_count` / `overall_rating` / `brew_count` 聚合回写、饮用状态筛选、本地 smoke 残留清理、枚举值 / 常用选项体系、`variety` 豆种字段、中文错误文案与提示体验统一一期。
+- 全流程仍保持本地 MySQL、本地 Spring Boot、本地 Vite、本地 uploads 目录和手动 SQL 管理方式。
 
-本轮本地部署验收已实际执行并通过：
+本轮 v0.3 定版验收要求：
 
-- 使用本机 MySQL 8 初始化 `coffee_manager`，确认 `users`、`coffee_beans`、`coffee_reviews`、`brew_records` 等表存在。
-- 使用 `root/123456`、本地 `JWT_SECRET` 示例值和 `FILE_UPLOAD_PATH=D:\dev\coffee-manager\uploads` 启动后端。
-- `GET http://localhost:8080/api/health` 返回 `status=ok`、`database=ok`。
-- 启动 Vite 前端 `http://localhost:5173`，并确认 `/api`、`/uploads` 通过 Vite proxy 转发到 `http://localhost:8080`。
-- 使用默认账号 `admin/admin123456` 登录成功，浏览器打开 `/coffee` 后自动进入咖啡豆页面。
-- coffee 新增 / 详情 / 编辑 / 删除通过本地烟测。
-- file 封面上传通过本地烟测，返回 URL 符合 `/uploads/coffee-covers/{filename}`，并可通过该路径访问图片。
-- review 列表 / 新增 / 详情 / 编辑 / 删除通过本地烟测，评分步进 0.5 保持有效。
-- brew 列表 / 新增 / 详情 / 编辑 / 删除通过本地烟测。
-- 本地一键烟测脚本 `node scripts\local-smoke.mjs` 已运行通过，输出 `SMOKE_TEST_RESULT: PASS`。
+- 前端构建：在 `frontend` 目录运行 `npm run build`。
+- 本地烟测：在项目根目录运行 `node scripts\local-smoke.mjs`，预期输出 `SMOKE_TEST_RESULT: PASS`。
+- 清理工具预览：在项目根目录运行 `node scripts\clean-smoke-data.mjs --dry-run`，预期输出 `CLEAN_SMOKE_RESULT: PASS`。
 
-本 README 对应的是当前 v0.2 本地版 / 本地可复现启动状态，不代表延后事项已经完成。
+本 README 对应的是当前 v0.3 本地版 / 本地可复现启动状态，不代表延后事项已经完成。
 
 ## 当前已接受行为 / 风险
 
-- 烟测会创建带 `[SMOKE_TEST]` 前缀的 coffee / review / brew 测试数据，并通过逻辑删除清理；数据库中可能留下 `deleted=1` 的逻辑删除记录。
-- 烟测会执行封面上传，本地 `FILE_UPLOAD_PATH` 目录可能留下测试上传文件。
+- 枚举选项一期写在后端静态代码里，没有字典表和后台管理。
+- 枚举接口走现有 JWT 认证体系，除临时登录、健康检查和静态 uploads 外，业务接口仍需 token。
+- 饮用状态筛选基于数据库 `CURRENT_DATE`，依赖本地 MySQL / 后端时区一致性。
+- 历史聚合字段一致性依赖手动 SQL；旧库可执行 `backend/src/main/resources/db/refresh_coffee_aggregates.sql` 修复。
+- `scripts\clean-smoke-data.mjs` 会跳过无法从 smoke coffee 数据库记录证明归属的 uploads 文件。
+- 后端中文 message 需要重启服务后生效。
+- 前端封面大小限制当前按后端 5MB 配置同步写死。
+- 当前仍是本地个人使用定位，未按多人协作、生产安全或公网部署标准收口。
+- 烟测会创建带 `[SMOKE_TEST]` 前缀的数据，删除接口当前是逻辑删除，MySQL 中可能留下 `deleted=1` 记录；上传 smoke 封面文件可能留在本地 uploads 目录。
 - 历史旧封面文件缺失时，前端使用封面兜底占位展示，不阻断列表和详情页浏览。
-- 详情页“最近评价 / 最近冲煮”依赖现有后端列表排序，当前没有单独的详情页摘要排序接口。
-- 当前仍以本地个人使用为目标，未按多人协作、生产安全或公网部署标准收口。
 
-## v0.2 已知限制
+## 当前明确延后事项
 
-- 当前登录是 `admin/admin123456` 临时自动登录，没有正式登录页和完整用户体系。
-- JWT 过期与刷新策略仍是开发阶段实现，正式 token 生命周期后续统一处理。
-- 上传文件保存在本地目录，尚未接入云存储或服务器持久化方案。
-- 上传新封面不会自动删除旧文件，图片删除和旧文件清理延后。
-- `review_count`、`overall_rating`、`brew_count` 已在 review / brew 新增、编辑、删除后回写；旧库历史数据可手动执行 `backend/src/main/resources/db/refresh_coffee_aggregates.sql` 修复。
-- roastLevel / processMethod / origin / variety 当前已有一期静态常用选项接口；暂不做数据库字典表和枚举管理后台。
-- 数据库脚本包含风味标签相关表和种子数据，但风味标签业务尚未接入。
-- 部分后端错误文案已经中文化，仍存在英文文案；统一中文化延后。
-- 当前 UI 是 MVP 原生样式，正式 UI 组件体系延后。
-
-## 延后事项
-
-- migration 工具暂不引入，当前继续手动 SQL。
-- 正式登录和 token 生命周期延后。
-- 赏味期排序 / 提醒 / 推荐算法延后。
-- 风味标签体系延后。
-- 统计图表延后。
-- 移动端专项适配延后。
-- Docker / 上线部署延后。
-- 图片旧文件清理延后。
-- OCR 延后。
+- 正式登录和 token 生命周期。
+- migration 工具。
+- Docker / 上线部署。
+- 字典表 / 枚举后台管理。
+- 风味标签体系。
+- 统计图表。
+- 推荐算法。
+- 赏味期提醒。
+- 移动端专项适配。
+- OCR 自动识别。
+- 完整桌面应用壳。
 
 ## 后续开发建议
 
-建议下一阶段先把“本地一键复现启动检查”固化下来：保留本地 MySQL、后端、前端和 MVP 主链路烟测步骤，方便后续每次继续开发前快速确认基础链路仍然可用。
+v0.3 之后继续保持“先跑本地 smoke、再做小步变更、最后 build + smoke + clean dry-run”的节奏。下一阶段如要扩展功能，建议优先在不改变本地个人使用定位的前提下，单独开分支处理正式登录、migration 或字典表等较大边界变更。

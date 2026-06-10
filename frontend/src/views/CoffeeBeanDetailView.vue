@@ -6,9 +6,9 @@ import { listBrewRecords } from '../api/brew'
 import type { BrewRecord } from '../api/brew'
 import { getCoffeeBean } from '../api/coffee'
 import type { CoffeeBeanDetail } from '../api/coffee'
-import { getRequestErrorMessage } from '../api/request'
 import { listCoffeeReviews } from '../api/review'
 import type { CoffeeReview } from '../api/review'
+import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 type CoffeeAction = 'edit' | 'review' | 'brew'
 
@@ -100,7 +100,7 @@ async function loadBean() {
     }
 
     bean.value = null
-    error.value = getRequestErrorMessage(caughtError)
+    error.value = getDetailErrorMessage(caughtError)
   } finally {
     if (isCurrentBeanFetch(beanId, fetchVersion)) {
       loading.value = false
@@ -143,7 +143,7 @@ async function fetchReviewSummary(beanId: number | null = actionBeanId.value) {
     }
   } catch (caughtError) {
     if (isCurrentReviewSummaryFetch(beanId, fetchVersion)) {
-      reviewSummaryError.value = getRequestErrorMessage(caughtError)
+      reviewSummaryError.value = getFriendlyErrorMessage(caughtError, '最近评价加载失败，请稍后重试。')
     }
   } finally {
     if (isCurrentReviewSummaryFetch(beanId, fetchVersion)) {
@@ -173,7 +173,7 @@ async function fetchBrewSummary(beanId: number | null = actionBeanId.value) {
     }
   } catch (caughtError) {
     if (isCurrentBrewSummaryFetch(beanId, fetchVersion)) {
-      brewSummaryError.value = getRequestErrorMessage(caughtError)
+      brewSummaryError.value = getFriendlyErrorMessage(caughtError, '最近冲煮记录加载失败，请稍后重试。')
     }
   } finally {
     if (isCurrentBrewSummaryFetch(beanId, fetchVersion)) {
@@ -188,6 +188,20 @@ function reloadReviewSummary() {
 
 function reloadBrewSummary() {
   void fetchBrewSummary()
+}
+
+function getDetailErrorMessage(caughtError: unknown) {
+  const message = getFriendlyErrorMessage(caughtError, '咖啡豆档案加载失败，请稍后重试。')
+
+  if (
+    message.includes('咖啡豆不存在') ||
+    message.includes('资源不存在') ||
+    message.includes('数据不存在')
+  ) {
+    return '这包豆子的档案没有找到，可能已经被删除了。'
+  }
+
+  return message
 }
 
 function resetSummaryState() {
@@ -510,7 +524,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
                 <button type="button" class="secondary compact-button" @click="reloadReviewSummary">重试</button>
               </div>
               <div v-else-if="!hasRecentReviews" class="state-box summary-state summary-empty">
-                还没有评价，先给这支豆子留下一条风味笔记吧。
+                暂时没有评价，喝完这一杯再写点感受。
               </div>
               <div v-else class="summary-list">
                 <article v-for="review in recentReviews" :key="review.id" class="summary-card">
@@ -542,7 +556,7 @@ function joinParts(...parts: Array<string | null | undefined>) {
                 <button type="button" class="secondary compact-button" @click="reloadBrewSummary">重试</button>
               </div>
               <div v-else-if="!hasRecentBrewRecords" class="state-box summary-state summary-empty">
-                还没有冲煮记录，下一杯可以从这里开始复盘。
+                还没有冲煮记录，下一次开冲时记一笔。
               </div>
               <div v-else class="summary-list">
                 <article v-for="record in recentBrewRecords" :key="record.id" class="summary-card">

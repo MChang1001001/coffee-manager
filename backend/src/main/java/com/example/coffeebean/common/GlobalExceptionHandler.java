@@ -1,6 +1,7 @@
 package com.example.coffeebean.common;
 
 import com.example.coffeebean.config.FileStorageProperties;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,16 +45,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleConstraintViolationException(ConstraintViolationException exception) {
+        String message = exception.getConstraintViolations()
+                .stream()
+                .findFirst()
+                .map(ConstraintViolation::getMessage)
+                .orElse(ErrorCode.PARAM_ERROR.getMessage());
         return ResponseEntity
                 .badRequest()
-                .body(ApiResponse.fail(ErrorCode.PARAM_ERROR, exception.getMessage()));
+                .body(ApiResponse.fail(ErrorCode.PARAM_ERROR, message));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException() {
         return ResponseEntity
                 .badRequest()
-                .body(ApiResponse.fail(ErrorCode.PARAM_ERROR));
+                .body(ApiResponse.fail(ErrorCode.PARAM_ERROR, "请求参数格式不正确，请检查日期或数字格式。"));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
@@ -74,7 +80,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceededException() {
-        String message = "文件大小不能超过 " + formatDataSize(fileStorageProperties.getMaxSize());
+        String message = "文件太大，不能超过 " + formatDataSize(fileStorageProperties.getMaxSize());
         return ResponseEntity
                 .badRequest()
                 .body(ApiResponse.fail(ErrorCode.PARAM_ERROR, message));

@@ -10,29 +10,29 @@ import lombok.Data;
 @Data
 public class BrewRecordUpdateRequest {
 
-    @NotBlank(message = "brewMethod cannot be blank")
-    @Size(max = 64, message = "brewMethod length must be less than or equal to 64")
+    @NotBlank(message = "冲煮方式不能为空")
+    @Size(max = 64, message = "冲煮方式不能超过64个字符")
     private String brewMethod;
 
-    @DecimalMin(value = "0.01", message = "beanAmountGrams must be greater than 0")
+    @DecimalMin(value = "0.01", message = "粉量必须大于0")
     private BigDecimal beanAmountGrams;
 
-    @DecimalMin(value = "0.01", message = "waterAmountMl must be greater than 0")
+    @DecimalMin(value = "0.01", message = "水量必须大于0")
     private BigDecimal waterAmountMl;
 
-    @Size(max = 32, message = "ratio length must be less than or equal to 32")
+    @Size(max = 32, message = "比例不能超过32个字符")
     private String ratio;
 
-    @DecimalMin(value = "0.01", message = "waterTemperature must be greater than 0")
+    @DecimalMin(value = "0.01", message = "水温必须大于0")
     private BigDecimal waterTemperature;
 
-    @Size(max = 128, message = "grindSize length must be less than or equal to 128")
+    @Size(max = 128, message = "研磨度不能超过128个字符")
     private String grindSize;
 
-    @Positive(message = "brewTimeSeconds must be greater than 0")
+    @Positive(message = "冲煮时长必须大于0")
     private Integer brewTimeSeconds;
 
-    @Size(max = 255, message = "resultSummary length must be less than or equal to 255")
+    @Size(max = 255, message = "结果摘要不能超过255个字符")
     private String resultSummary;
 
     private String resultNotes;

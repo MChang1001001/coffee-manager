@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosRequestConfig } from 'axios'
+import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 export interface ApiResponse<T> {
   code: number
@@ -52,27 +53,5 @@ export async function request<T>(config: AxiosRequestConfig) {
 }
 
 export function getRequestErrorMessage(caughtError: unknown) {
-  if (axios.isAxiosError<ApiResponse<unknown>>(caughtError)) {
-    const responseMessage = caughtError.response?.data?.message
-
-    if (responseMessage) {
-      return responseMessage
-    }
-
-    if (caughtError.response) {
-      return `后端响应异常：${caughtError.response.status}`
-    }
-
-    if (caughtError.request) {
-      return '无法连接后端服务，请确认 Spring Boot 已启动并且 Vite 代理可用。'
-    }
-
-    return caughtError.message
-  }
-
-  if (caughtError instanceof Error) {
-    return caughtError.message
-  }
-
-  return '未知错误'
+  return getFriendlyErrorMessage(caughtError, '请求失败，请稍后重试。')
 }

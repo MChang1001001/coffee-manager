@@ -33,7 +33,7 @@ public class BrewRecordController {
     @PostMapping("/coffee-beans/{coffeeBeanId}/brew-records")
     public ApiResponse<BrewRecordIdResponse> create(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Positive(message = "coffeeBeanId must be greater than 0") @PathVariable Long coffeeBeanId,
+            @Positive(message = "咖啡豆ID必须大于0") @PathVariable Long coffeeBeanId,
             @Valid @RequestBody BrewRecordCreateRequest request) {
         return ApiResponse.success(brewRecordService.create(requireUserId(currentUser), coffeeBeanId, request));
     }
@@ -41,7 +41,7 @@ public class BrewRecordController {
     @GetMapping("/coffee-beans/{coffeeBeanId}/brew-records")
     public ApiResponse<PageResponse<BrewRecordResponse>> listByCoffeeBean(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Positive(message = "coffeeBeanId must be greater than 0") @PathVariable Long coffeeBeanId,
+            @Positive(message = "咖啡豆ID必须大于0") @PathVariable Long coffeeBeanId,
             @Valid @ModelAttribute BrewRecordListQuery query) {
         return ApiResponse.success(brewRecordService.listByCoffeeBean(
                 requireUserId(currentUser),
@@ -52,14 +52,14 @@ public class BrewRecordController {
     @GetMapping("/brew-records/{id}")
     public ApiResponse<BrewRecordResponse> detail(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Positive(message = "brewRecordId must be greater than 0") @PathVariable Long id) {
+            @Positive(message = "冲煮记录ID必须大于0") @PathVariable Long id) {
         return ApiResponse.success(brewRecordService.getDetail(requireUserId(currentUser), id));
     }
 
     @PutMapping("/brew-records/{id}")
     public ApiResponse<Boolean> update(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Positive(message = "brewRecordId must be greater than 0") @PathVariable Long id,
+            @Positive(message = "冲煮记录ID必须大于0") @PathVariable Long id,
             @Valid @RequestBody BrewRecordUpdateRequest request) {
         return ApiResponse.success(brewRecordService.update(requireUserId(currentUser), id, request));
     }
@@ -67,7 +67,7 @@ public class BrewRecordController {
     @DeleteMapping("/brew-records/{id}")
     public ApiResponse<Boolean> delete(
             @AuthenticationPrincipal CurrentUser currentUser,
-            @Positive(message = "brewRecordId must be greater than 0") @PathVariable Long id) {
+            @Positive(message = "冲煮记录ID必须大于0") @PathVariable Long id) {
         return ApiResponse.success(brewRecordService.delete(requireUserId(currentUser), id));
     }
 

@@ -77,7 +77,7 @@ public class FileServiceImpl implements FileService {
     private void validateFileSize(MultipartFile file) {
         DataSize maxSize = fileStorageProperties.getMaxSize();
         if (maxSize != null && file.getSize() > maxSize.toBytes()) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "文件大小不能超过 " + formatDataSize(maxSize));
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "文件太大，不能超过 " + formatDataSize(maxSize));
         }
     }
 
@@ -95,7 +95,7 @@ public class FileServiceImpl implements FileService {
 
     private String normalizeContentType(String contentType) {
         if (!StringUtils.hasText(contentType)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "只允许上传 jpg、png、webp 图片");
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "暂时只支持 jpg、png、webp 图片");
         }
         return contentType.trim().toLowerCase(Locale.ROOT);
     }
@@ -109,7 +109,7 @@ public class FileServiceImpl implements FileService {
                 .map(value -> value.trim().toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
         if (!allowedContentTypes.contains(contentType) || !CONTENT_TYPE_EXTENSIONS.containsKey(contentType)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "只允许上传 jpg、png、webp 图片");
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "暂时只支持 jpg、png、webp 图片");
         }
         return CONTENT_TYPE_EXTENSIONS.get(contentType);
     }
@@ -122,7 +122,7 @@ public class FileServiceImpl implements FileService {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "文件读取失败");
         }
         if (!matchesImageSignature(header, contentType)) {
-            throw new BusinessException(ErrorCode.PARAM_ERROR, "只允许上传 jpg、png、webp 图片");
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "暂时只支持 jpg、png、webp 图片");
         }
     }
 

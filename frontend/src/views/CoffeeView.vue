@@ -35,7 +35,7 @@ import type {
 } from '../api/coffee'
 import type { BrewRecord, BrewRecordPayload } from '../api/brew'
 import type { CoffeeReview, CoffeeReviewPayload } from '../api/review'
-import { getRequestErrorMessage } from '../api/request'
+import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 interface CoffeeBeanForm {
   name: string
@@ -87,6 +87,9 @@ interface BrewForm {
 type RatingFieldKey = Exclude<keyof ReviewForm, 'content'>
 type CoffeeRouteAction = 'edit' | 'review' | 'brew'
 type DrinkStatusFilter = '' | 'NO_DATE' | 'RESTING' | 'READY' | 'EXPIRING_SOON' | 'EXPIRED'
+
+const MAX_COVER_FILE_SIZE_BYTES = 5 * 1024 * 1024
+const SUPPORTED_COVER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 const defaultForm: CoffeeBeanForm = {
   name: '',
@@ -419,7 +422,7 @@ async function bootPage() {
   try {
     currentUser.value = await ensureDevAuth()
   } catch (caughtError) {
-    error.value = `临时登录失败：${getRequestErrorMessage(caughtError)}`
+    error.value = `临时登录失败：${getFriendlyErrorMessage(caughtError, '请确认后端服务是否正常。')}`
     loading.value = false
     return
   }
@@ -453,7 +456,7 @@ async function fetchBeans() {
 
     applyPage(page)
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    error.value = getFriendlyErrorMessage(caughtError, '咖啡豆列表加载失败，请稍后重试。')
   } finally {
     loading.value = false
   }
@@ -530,7 +533,7 @@ async function handleRouteBeanAction() {
   try {
     await openRoutedBeanAction(beanId, action)
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    error.value = getFriendlyErrorMessage(caughtError, '操作失败，请稍后重试。')
   } finally {
     await clearRouteBeanAction()
     handlingRouteAction.value = false
@@ -670,7 +673,7 @@ async function fetchReviews() {
     applyReviewPage(page)
   } catch (caughtError) {
     if (isCurrentReviewFetch(beanId, fetchVersion)) {
-      reviewError.value = getRequestErrorMessage(caughtError)
+      reviewError.value = getFriendlyErrorMessage(caughtError, '评价加载失败，请稍后重试。')
     }
   } finally {
     if (isCurrentReviewFetch(beanId, fetchVersion)) {
@@ -734,7 +737,7 @@ async function submitReviewForm() {
   try {
     payload = toReviewPayload()
   } catch (caughtError) {
-    reviewFormError.value = getRequestErrorMessage(caughtError)
+    reviewFormError.value = getFriendlyErrorMessage(caughtError, '请检查评价表单后再保存。')
     return
   }
 
@@ -755,7 +758,7 @@ async function submitReviewForm() {
     await fetchReviews()
     await fetchBeans()
   } catch (caughtError) {
-    reviewFormError.value = getRequestErrorMessage(caughtError)
+    reviewFormError.value = getFriendlyErrorMessage(caughtError, '评价保存失败，请稍后重试。')
   } finally {
     reviewSaving.value = false
   }
@@ -784,7 +787,7 @@ async function confirmDeleteReview(review: CoffeeReview) {
     await fetchReviews()
     await fetchBeans()
   } catch (caughtError) {
-    reviewError.value = getRequestErrorMessage(caughtError)
+    reviewError.value = getFriendlyErrorMessage(caughtError, '评价删除失败，请稍后重试。')
   } finally {
     reviewDeletingId.value = null
   }
@@ -864,7 +867,7 @@ async function fetchBrewRecords() {
     applyBrewPage(page)
   } catch (caughtError) {
     if (isCurrentBrewFetch(beanId, fetchVersion)) {
-      brewError.value = getRequestErrorMessage(caughtError)
+      brewError.value = getFriendlyErrorMessage(caughtError, '冲煮记录加载失败，请稍后重试。')
     }
   } finally {
     if (isCurrentBrewFetch(beanId, fetchVersion)) {
@@ -928,7 +931,7 @@ async function submitBrewForm() {
   try {
     payload = toBrewPayload()
   } catch (caughtError) {
-    brewFormError.value = getRequestErrorMessage(caughtError)
+    brewFormError.value = getFriendlyErrorMessage(caughtError, '请检查冲煮表单后再保存。')
     return
   }
 
@@ -949,7 +952,7 @@ async function submitBrewForm() {
     await fetchBrewRecords()
     await fetchBeans()
   } catch (caughtError) {
-    brewFormError.value = getRequestErrorMessage(caughtError)
+    brewFormError.value = getFriendlyErrorMessage(caughtError, '冲煮记录保存失败，请稍后重试。')
   } finally {
     brewSaving.value = false
   }
@@ -978,7 +981,7 @@ async function confirmDeleteBrew(record: BrewRecord) {
     await fetchBrewRecords()
     await fetchBeans()
   } catch (caughtError) {
-    brewError.value = getRequestErrorMessage(caughtError)
+    brewError.value = getFriendlyErrorMessage(caughtError, '冲煮记录删除失败，请稍后重试。')
   } finally {
     brewDeletingId.value = null
   }
@@ -1028,7 +1031,7 @@ async function startEdit(bean: CoffeeBeanListItem) {
   try {
     openEditDetail(await getCoffeeBean(bean.id))
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    error.value = getFriendlyErrorMessage(caughtError, '咖啡豆档案加载失败，请稍后重试。')
   } finally {
     editingLoadingId.value = null
   }
@@ -1055,7 +1058,7 @@ async function submitForm() {
   try {
     payload = toPayload()
   } catch (caughtError) {
-    formError.value = getRequestErrorMessage(caughtError)
+    formError.value = getFriendlyErrorMessage(caughtError, '请检查咖啡豆表单后再保存。')
     return
   }
 
@@ -1076,7 +1079,7 @@ async function submitForm() {
     notice.value = successMessage
     await fetchBeans()
   } catch (caughtError) {
-    formError.value = getRequestErrorMessage(caughtError)
+    formError.value = getFriendlyErrorMessage(caughtError, '咖啡豆保存失败，请稍后重试。')
   } finally {
     saving.value = false
   }
@@ -1111,7 +1114,7 @@ async function confirmDelete(bean: CoffeeBeanListItem) {
     notice.value = '咖啡豆已删除。'
     await fetchBeans()
   } catch (caughtError) {
-    error.value = getRequestErrorMessage(caughtError)
+    error.value = getFriendlyErrorMessage(caughtError, '咖啡豆删除失败，请稍后重试。')
   } finally {
     deletingId.value = null
   }
@@ -1171,8 +1174,14 @@ async function handleCoverFileChange(event: Event) {
   coverUploadNotice.value = ''
   formError.value = ''
 
-  if (file.type && !file.type.startsWith('image/')) {
-    coverUploadError.value = '请选择图片文件。'
+  if (file.size > MAX_COVER_FILE_SIZE_BYTES) {
+    coverUploadError.value = '封面图片太大了，换一张小一点的试试。'
+    input.value = ''
+    return
+  }
+
+  if (!isSupportedCoverFile(file)) {
+    coverUploadError.value = '暂时只支持常见图片格式。'
     input.value = ''
     return
   }
@@ -1189,7 +1198,7 @@ async function handleCoverFileChange(event: Event) {
     form.coverImageUrl = uploaded.url
     coverUploadNotice.value = '封面上传成功，已写入封面 URL。'
   } catch (caughtError) {
-    coverUploadError.value = getRequestErrorMessage(caughtError)
+    coverUploadError.value = getCoverUploadErrorMessage(caughtError)
   } finally {
     coverUploading.value = false
     input.value = ''
@@ -1284,32 +1293,35 @@ function fillBrewForm(record: BrewRecord) {
 }
 
 function toPayload(): CoffeeBeanPayload {
-  const name = form.name.trim()
+  const name = requiredText(form.name, '名称', 128)
+  const roastDate = dateOrNull(form.roastDate, '烘焙日期')
+  const bestFromDate = dateOrNull(form.bestFromDate, '赏味开始日期')
+  const bestToDate = dateOrNull(form.bestToDate, '赏味结束日期')
 
-  if (!name) {
-    throw new Error('咖啡豆名称不能为空。')
+  if (bestFromDate && bestToDate && bestToDate < bestFromDate) {
+    throw new Error('赏味结束日期不能早于赏味开始日期。')
   }
 
   return {
     name,
-    origin: emptyToNull(form.origin),
-    region: emptyToNull(form.region),
-    farm: emptyToNull(form.farm),
-    variety: emptyToNull(form.variety),
-    processMethod: emptyToNull(form.processMethod),
-    roastLevel: emptyToNull(form.roastLevel),
-    roaster: emptyToNull(form.roaster),
-    roastDate: emptyToNull(form.roastDate),
-    bestFromDate: emptyToNull(form.bestFromDate),
-    bestToDate: emptyToNull(form.bestToDate),
-    purchaseDate: emptyToNull(form.purchaseDate),
-    openDate: emptyToNull(form.openDate),
-    finishDate: emptyToNull(form.finishDate),
+    origin: optionalText(form.origin, '产地', 128),
+    region: optionalText(form.region, '产区', 128),
+    farm: optionalText(form.farm, '庄园/农场', 128),
+    variety: optionalText(form.variety, '豆种', 128),
+    processMethod: optionalText(form.processMethod, '处理法', 64),
+    roastLevel: optionalText(form.roastLevel, '烘焙度', 64),
+    roaster: optionalText(form.roaster, '烘焙商', 128),
+    roastDate,
+    bestFromDate,
+    bestToDate,
+    purchaseDate: dateOrNull(form.purchaseDate, '购买日期'),
+    openDate: dateOrNull(form.openDate, '开封日期'),
+    finishDate: dateOrNull(form.finishDate, '喝完日期'),
     netWeightGrams: positiveNumberOrNull(form.netWeightGrams, '净含量'),
     price: nonNegativeNumberOrNull(form.price, '价格'),
-    currency: emptyToNull(form.currency),
-    status: emptyToNull(form.status),
-    coverImageUrl: emptyToNull(form.coverImageUrl),
+    currency: optionalText(form.currency, '币种', 16),
+    status: optionalText(form.status, '状态', 64),
+    coverImageUrl: optionalText(form.coverImageUrl, '封面 URL', 500),
     notes: emptyToNull(form.notes),
   }
 }
@@ -1323,7 +1335,7 @@ function toReviewPayload(): CoffeeReviewPayload {
     bitternessRating: optionalRatingNumber(reviewForm.bitternessRating, '苦感评分'),
     bodyRating: optionalRatingNumber(reviewForm.bodyRating, '醇厚度评分'),
     aftertasteRating: optionalRatingNumber(reviewForm.aftertasteRating, '余韵评分'),
-    content: emptyToNull(reviewForm.content),
+    content: optionalText(reviewForm.content, '评价内容', 2000),
   }
 }
 
@@ -1356,6 +1368,63 @@ function emptyToNull(value: string) {
 function emptyToUndefined(value: string) {
   const trimmed = value.trim()
   return trimmed === '' ? undefined : trimmed
+}
+
+function requiredText(value: string, label: string, maxLength: number) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    throw new Error(`${label}不能为空。`)
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${label}不能超过 ${maxLength} 个字符。`)
+  }
+
+  return trimmed
+}
+
+function optionalText(value: string, label: string, maxLength: number) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${label}不能超过 ${maxLength} 个字符。`)
+  }
+
+  return trimmed
+}
+
+function dateOrNull(value: string, label: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  if (!isValidDateString(trimmed)) {
+    throw new Error(`${label}格式不正确。`)
+  }
+
+  return trimmed
+}
+
+function isValidDateString(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+
+  const [year, month, day] = value.split('-').map(Number)
+  const parsed = new Date(year, month - 1, day)
+
+  return (
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day
+  )
 }
 
 function valueToString(value: string | number | null | undefined) {
@@ -1402,7 +1471,7 @@ function parseOptionalNumber(value: string | number, label: string) {
   const parsed = Number(trimmed)
 
   if (!Number.isFinite(parsed)) {
-    throw new Error(`${label}必须是数字。`)
+    throw new Error(`${label}请输入有效数字。`)
   }
 
   return parsed
@@ -1436,8 +1505,45 @@ function assertRatingRange(value: number, label: string) {
   }
 
   if (!Number.isInteger(value * 2)) {
-    throw new Error(`${label}必须以 0.5 为步进。`)
+    throw new Error(`${label}建议按 0.5 为步进。`)
   }
+}
+
+function isSupportedCoverFile(file: File) {
+  if (file.type) {
+    return SUPPORTED_COVER_TYPES.has(file.type)
+  }
+
+  return /\.(jpe?g|png|webp)$/i.test(file.name)
+}
+
+function getCoverUploadErrorMessage(caughtError: unknown) {
+  const message = getFriendlyErrorMessage(caughtError, '封面上传失败，请稍后重试。')
+
+  if (message.includes('太大') || message.includes('大小') || message.includes('413')) {
+    return '封面图片太大了，换一张小一点的试试。'
+  }
+
+  if (
+    message.includes('只允许上传') ||
+    message.includes('格式') ||
+    message.includes('类型') ||
+    message.includes('jpg') ||
+    message.includes('png') ||
+    message.includes('webp')
+  ) {
+    return '暂时只支持常见图片格式。'
+  }
+
+  if (message.includes('网络连接失败') || message.includes('后端服务')) {
+    return '封面上传失败，请确认后端服务是否正常。'
+  }
+
+  if (message.includes('请求失败') || message.includes('服务暂时') || message.includes('请求超时')) {
+    return '封面上传失败，请稍后重试。'
+  }
+
+  return message
 }
 
 function display(value: string | number | null | undefined) {
@@ -1852,8 +1958,8 @@ function joinParts(...parts: Array<string | null | undefined>) {
       </div>
       <div v-else-if="!hasRows" class="state-box empty archive-empty">
         <div>
-          <h3>{{ hasActiveFilters ? '没有匹配的咖啡豆' : '档案库暂时为空' }}</h3>
-          <p>{{ hasActiveFilters ? '换一组关键词或清空筛选后再看看。' : '先新增一支咖啡豆，给档案库贴上第一张豆卡。' }}</p>
+          <h3>{{ hasActiveFilters ? '没有找到符合条件的豆子' : '还没有咖啡豆' }}</h3>
+          <p>{{ hasActiveFilters ? '换个筛选试试看。' : '先记录今天这一包吧。' }}</p>
           <div class="empty-actions">
             <button v-if="hasActiveFilters" type="button" class="secondary" :disabled="loading" @click="resetFilters">
               清空筛选
@@ -2225,7 +2331,9 @@ function joinParts(...parts: Array<string | null | undefined>) {
           <p v-if="reviewNotice" class="alert success">{{ reviewNotice }}</p>
 
           <div v-if="reviewLoading" class="state-box review-state">正在加载评价...</div>
-          <div v-else-if="!hasReviews" class="state-box empty review-state">暂无评价。</div>
+          <div v-else-if="!hasReviews" class="state-box empty review-state">
+            暂时没有评价，喝完这一杯再写点感受。
+          </div>
           <div v-else class="review-list">
             <article v-for="review in reviews" :key="review.id" class="review-card">
               <header class="review-card-header">
@@ -2393,7 +2501,9 @@ function joinParts(...parts: Array<string | null | undefined>) {
           <p v-if="brewNotice" class="alert success">{{ brewNotice }}</p>
 
           <div v-if="brewLoading" class="state-box review-state">正在加载冲煮记录...</div>
-          <div v-else-if="!hasBrewRecords" class="state-box empty review-state">暂无冲煮记录。</div>
+          <div v-else-if="!hasBrewRecords" class="state-box empty review-state">
+            还没有冲煮记录，下一次开冲时记一笔。
+          </div>
           <div v-else class="review-list">
             <article v-for="record in brewRecords" :key="record.id" class="review-card">
               <header class="review-card-header">
