@@ -1,0 +1,6 @@
+ai:
+  deepseek:
+    api-key: "替换为你的 DeepSeek API Key"
+    base-url: https://api.deepseek.com
+    model: deepseek-chat
+    enabled: true

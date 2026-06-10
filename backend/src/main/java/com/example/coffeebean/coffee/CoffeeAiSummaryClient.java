@@ -74,7 +74,7 @@ public class CoffeeAiSummaryClient {
                     request,
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR, AI_FAILED_MESSAGE);
+                throw toDeepSeekHttpException(response.statusCode());
             }
             CoffeeSummaryDraftResponse draft = parseDraft(extractContent(response.body()));
             draft.setSummarySource("AI");
@@ -99,6 +99,16 @@ public class CoffeeAiSummaryClient {
         body.put("response_format", Map.of("type", "json_object"));
         body.put("temperature", 0.4);
         return objectMapper.writeValueAsString(body);
+    }
+
+    private BusinessException toDeepSeekHttpException(int statusCode) {
+        if (statusCode == 401 || statusCode == 403) {
+            return new BusinessException(ErrorCode.PARAM_ERROR, "DeepSeek API Key 无效，请检查本地配置文件。");
+        }
+        if (statusCode == 429) {
+            return new BusinessException(ErrorCode.SYSTEM_ERROR, "DeepSeek 调用额度或频率受限，请稍后重试。");
+        }
+        return new BusinessException(ErrorCode.SYSTEM_ERROR, AI_FAILED_MESSAGE);
     }
 
     private URI chatCompletionsUri() {

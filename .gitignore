@@ -27,5 +27,7 @@ logs/
 # Runtime / secrets
 .env
 *.local
+backend/application-local.yml
+backend/application-local.yaml
 uploads/
 backend/uploads/

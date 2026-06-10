@@ -348,7 +348,40 @@ MVP 本地开发可以使用默认值、示例值或本地环境变量配置值�
 
 ### DeepSeek AI 总结配置
 
-AI 评测总结只在后端调用 DeepSeek，不会把 API Key 暴露给前端。默认配置位于 `application.yml`：
+AI 评测总结只在后端调用 DeepSeek，不会把 API Key 暴露给前端。推荐把真实 key 写在本地文件：
+
+```text
+backend/application-local.yml
+```
+
+该文件已被 `.gitignore` 忽略，不要提交到 Git。可以复制模板后修改：
+
+```powershell
+Copy-Item backend\application-local.example.yml backend\application-local.yml
+```
+
+示例内容：
+
+```yaml
+ai:
+  deepseek:
+    api-key: "你的 DeepSeek API Key"
+    base-url: https://api.deepseek.com
+    model: deepseek-chat
+    enabled: true
+```
+
+`application.yml` 会自动额外导入这个本地文件：
+
+```yaml
+spring:
+  config:
+    import:
+      - optional:file:./application-local.yml
+      - optional:file:./backend/application-local.yml
+```
+
+默认配置仍保留环境变量占位，适合作为备用覆盖方式：
 
 ```yaml
 ai:
@@ -359,7 +392,7 @@ ai:
     enabled: ${DEEPSEEK_ENABLED:true}
 ```
 
-未配置 `DEEPSEEK_API_KEY` 或关闭 `DEEPSEEK_ENABLED` 时，`POST /api/coffee-beans/{id}/ai-summary` 不会调用外部 API，会返回中文提示：`AI 总结功能未配置 DeepSeek API Key。`
+修改 `backend/application-local.yml` 后必须重启后端才会生效。未配置 key 或关闭 `enabled` 时，`POST /api/coffee-beans/{id}/ai-summary` 不会调用外部 API，会返回中文提示：`AI 总结功能未配置 DeepSeek API Key。`
 
 ### Redis 当前状态
 
